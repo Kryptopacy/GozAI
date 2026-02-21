@@ -1,0 +1,51 @@
+name: gozai
+description: "AI-powered accessibility copilot for low-vision patients"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: any
+  firebase_auth: any
+  cloud_firestore: any
+
+  # Audio (mic capture + playback)
+  record: any
+  just_audio: any
+
+  # Camera
+  camera: any
+
+  # WebSocket for Gemini Live API
+  web_socket_channel: any
+
+  # ML Kit (offline OCR)
+  google_mlkit_text_recognition: any
+
+  # State management
+  provider: any
+
+  # Utilities
+  permission_handler: any
+  vibration: any
+  sensors_plus: any
+  flutter_dotenv: any
+  path_provider: any
+  uuid: any
+  cupertino_icons: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: any
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env

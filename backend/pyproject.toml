@@ -1,0 +1,16 @@
+[project]
+name = "gozai-backend"
+version = "1.0.0"
+description = "GozAI ADK Backend Agent - Accessibility copilot for low-vision patients"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "google-adk>=1.0.0",
+    "google-genai>=1.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
