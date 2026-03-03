@@ -18,11 +18,23 @@ import 'package:web/web.dart' as web;
 ///   a tactile substitute. This creates an audible+physical "click" sensation
 ///   via the speaker which is the accepted web workaround.
 class HapticService {
-  /// Play a short Web Audio oscillator burst as a haptic substitute on web.
-  /// Frequency and duration map to perceived "weight" of the feedback.
-  static void _webAudioClick({double frequency = 200.0, int durationMs = 20}) {
+  /// Play a short Web Audio oscillator burst as an audible haptic substitute
+  /// AND attempt the iOS silent switch click exploit for tactile feedback.
+  static void _webTactileClick({double frequency = 200.0, int durationMs = 20}) {
     if (!kIsWeb) return;
+    
     try {
+      // 1. Trigger iOS silent switch haptic hack
+      final label = web.document.getElementById('haptic-label');
+      if (label != null && label is web.HTMLElement) {
+        label.click();
+      }
+    } catch (e) {
+      debugPrint('HapticService: iOS Web switch click failed: $e');
+    }
+    
+    try {
+      // 2. Play audible fallback click
       final ctx = web.AudioContext();
       final oscillator = ctx.createOscillator();
       final gainNode = ctx.createGain();
@@ -53,7 +65,7 @@ class HapticService {
   /// Quick pulse — general acknowledgment
   static Future<void> tap() async {
     if (kIsWeb) {
-      _webAudioClick(frequency: 300.0, durationMs: 20);
+      _webTactileClick(frequency: 300.0, durationMs: 20);
     } else {
       HapticFeedback.lightImpact();
     }
@@ -62,7 +74,7 @@ class HapticService {
   /// Strong single buzz — attention needed
   static Future<void> alert() async {
     if (kIsWeb) {
-      _webAudioClick(frequency: 150.0, durationMs: 60);
+      _webTactileClick(frequency: 150.0, durationMs: 60);
     } else {
       HapticFeedback.heavyImpact();
     }
@@ -72,11 +84,11 @@ class HapticService {
   static Future<void> hazardWarning() async {
     if (kIsWeb) {
       // Three rapid clicks with slight pitch drop
-      _webAudioClick(frequency: 180.0, durationMs: 40);
+      _webTactileClick(frequency: 180.0, durationMs: 40);
       Future.delayed(const Duration(milliseconds: 90), () =>
-          _webAudioClick(frequency: 160.0, durationMs: 40));
+          _webTactileClick(frequency: 160.0, durationMs: 40));
       Future.delayed(const Duration(milliseconds: 180), () =>
-          _webAudioClick(frequency: 140.0, durationMs: 40));
+          _webTactileClick(frequency: 140.0, durationMs: 40));
     } else if (await Vibration.hasVibrator() == true) {
       Vibration.vibrate(
         pattern: [0, 100, 50, 100, 50, 100],
@@ -90,9 +102,9 @@ class HapticService {
   /// Double tap — person detected
   static Future<void> personDetected() async {
     if (kIsWeb) {
-      _webAudioClick(frequency: 260.0, durationMs: 30);
+      _webTactileClick(frequency: 260.0, durationMs: 30);
       Future.delayed(const Duration(milliseconds: 120), () =>
-          _webAudioClick(frequency: 260.0, durationMs: 30));
+          _webTactileClick(frequency: 260.0, durationMs: 30));
     } else if (await Vibration.hasVibrator() == true) {
       Vibration.vibrate(pattern: [0, 80, 120, 80]);
     } else {
@@ -103,7 +115,7 @@ class HapticService {
   /// Gentle sustained pulse — navigation cue
   static Future<void> navigationCue() async {
     if (kIsWeb) {
-      _webAudioClick(frequency: 220.0, durationMs: 50);
+      _webTactileClick(frequency: 220.0, durationMs: 50);
     } else if (await Vibration.hasVibrator() == true) {
       Vibration.vibrate(duration: 200, amplitude: 100);
     } else {
@@ -114,9 +126,9 @@ class HapticService {
   /// Connection state change feedback
   static Future<void> connected() async {
     if (kIsWeb) {
-      _webAudioClick(frequency: 350.0, durationMs: 25);
+      _webTactileClick(frequency: 350.0, durationMs: 25);
       Future.delayed(const Duration(milliseconds: 100), () =>
-          _webAudioClick(frequency: 420.0, durationMs: 40));
+          _webTactileClick(frequency: 420.0, durationMs: 40));
     } else if (await Vibration.hasVibrator() == true) {
       Vibration.vibrate(pattern: [0, 50, 100, 150]);
     } else {
@@ -127,7 +139,7 @@ class HapticService {
   /// Mode switch confirmation
   static Future<void> modeSwitch() async {
     if (kIsWeb) {
-      _webAudioClick(frequency: 280.0, durationMs: 15);
+      _webTactileClick(frequency: 280.0, durationMs: 15);
     } else {
       HapticFeedback.selectionClick();
     }
