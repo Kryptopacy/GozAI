@@ -1,5 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../core/theme.dart';
 
@@ -99,25 +101,67 @@ class DoctorDashboard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: GozAITheme.borderSubtle),
       ),
-      child: DataTable(
-        headingTextStyle: const TextStyle(
-          color: GozAITheme.textSecondary,
-          fontWeight: FontWeight.w600,
-          fontFamily: 'Inter',
-        ),
-        dataTextStyle: Theme.of(context).textTheme.labelLarge,
-        dividerThickness: 1,
-        columns: const [
-          DataColumn(label: Text('DATE / TIME')),
-          DataColumn(label: Text('EVENT TYPE')),
-          DataColumn(label: Text('CLINICAL NOTE')),
-          DataColumn(label: Text('SEVERITY')),
-        ],
-        rows: [
-          _buildRow('2026-02-23 14:30', 'Light Sensitivity', 'Patient stepped into direct, harsh lighting > 10,000 lux. Navigated away after 4s.', 'Low'),
-          _buildRow('2026-02-21 09:15', 'Prolonged Reading', 'Continuous OCR usage for > 45 minutes. Suggested eye rest interval.', 'Medium'),
-          _buildRow('2026-02-19 18:45', 'Voice Assistance', 'Requested navigation help in unfamiliar kitchen environment.', 'Low'),
-        ],
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('patients')
+            .doc('demo_patient_001')
+            .collection('clinical_events')
+            .orderBy('timestamp', descending: true)
+            .limit(10)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Center(child: CircularProgressIndicator(color: GozAITheme.primaryBlue)),
+            );
+          }
+
+          if (snapshot.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Center(child: Text('Error loading telemetry: ${snapshot.error}', style: const TextStyle(color: GozAITheme.hazardAlert))),
+            );
+          }
+
+          final docs = snapshot.data?.docs ?? [];
+          if (docs.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Center(child: Text('No recent clinical events logged.', style: TextStyle(color: GozAITheme.textSecondary))),
+            );
+          }
+
+          return DataTable(
+            headingTextStyle: const TextStyle(
+              color: GozAITheme.textSecondary,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'Inter',
+            ),
+            dataTextStyle: Theme.of(context).textTheme.labelLarge,
+            dividerThickness: 1,
+            columns: const [
+              DataColumn(label: Text('DATE / TIME')),
+              DataColumn(label: Text('EVENT TYPE')),
+              DataColumn(label: Text('CLINICAL NOTE')),
+              DataColumn(label: Text('SEVERITY')),
+            ],
+            rows: docs.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final time = data['timestamp'] as Timestamp?;
+              final formattedTime = time != null 
+                  ? DateFormat('yyyy-MM-dd HH:mm').format(time.toDate()) 
+                  : 'Just now';
+                  
+              return _buildRow(
+                formattedTime, 
+                data['type'] ?? 'Unknown', 
+                data['note'] ?? '', 
+                data['severity'] ?? 'Medium',
+              );
+            }).toList(),
+          );
+        }
       ),
     );
   }
@@ -126,20 +170,28 @@ class DoctorDashboard extends StatelessWidget {
     return DataRow(
       cells: [
         DataCell(Text(time)),
-        DataCell(Text(type, style: const TextStyle(color: GozAITheme.primaryBlue))),
+        DataCell(Text(type.replaceAll('_', ' ').toUpperCase(), style: const TextStyle(color: GozAITheme.primaryBlue))),
         DataCell(Text(note, style: const TextStyle(color: GozAITheme.textSecondary, fontSize: 14))),
         DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: severity == 'Medium' ? Colors.amber.withValues(alpha: 0.2) : GozAITheme.borderSubtle,
+              color: severity == 'High' 
+                 ? GozAITheme.hazardAlert.withValues(alpha: 0.2)
+                 : severity == 'Medium' 
+                    ? Colors.amber.withValues(alpha: 0.2) 
+                    : GozAITheme.borderSubtle,
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
               severity,
               style: TextStyle(
                 fontSize: 12,
-                color: severity == 'Medium' ? Colors.amber : GozAITheme.textSecondary,
+                color: severity == 'High' 
+                    ? GozAITheme.hazardAlert 
+                    : severity == 'Medium' 
+                        ? Colors.amber 
+                        : GozAITheme.textSecondary,
               ),
             ),
           ),
@@ -201,12 +253,15 @@ class _ClinicalDataCard extends StatelessWidget {
                 color: isPositiveTrend ? GozAITheme.success : GozAITheme.hazardAlert,
               ),
               const SizedBox(width: 4),
-              Text(
-                trend,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isPositiveTrend ? GozAITheme.success : GozAITheme.hazardAlert,
-                  fontWeight: FontWeight.w500,
+              Expanded(
+                child: Text(
+                  trend,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isPositiveTrend ? GozAITheme.success : GozAITheme.hazardAlert,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

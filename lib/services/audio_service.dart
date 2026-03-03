@@ -30,6 +30,11 @@ class AudioService extends ChangeNotifier {
   final List<Uint8List> _playbackBuffer = [];
   bool _isProcessingBuffer = false;
 
+  // Latency Confidence Ping (Sonar)
+  Timer? _latencyTimer;
+  Timer? _pingLoopTimer;
+  AudioPlayer? _pingPlayer;
+
   // Public getters
   bool get isRecording => _isRecording;
   bool get isPlaying => _isPlaying;
@@ -71,6 +76,7 @@ class AudioService extends ChangeNotifier {
     });
 
     _isRecording = true;
+    _resetLatencyTimer();
     notifyListeners();
     debugPrint('AudioService: Recording started (16kHz PCM mono)');
   }
@@ -87,6 +93,7 @@ class AudioService extends ChangeNotifier {
     }
 
     _isRecording = true;
+    _resetLatencyTimer();
     notifyListeners();
     debugPrint('AudioService: Recording started (web MediaRecorder)');
   }
@@ -108,12 +115,15 @@ class AudioService extends ChangeNotifier {
     }
 
     _isRecording = false;
+    _cancelLatencyPing();
     notifyListeners();
     debugPrint('AudioService: Recording stopped');
   }
 
   /// Queue PCM audio data from Gemini for playback.
   void queueAudioResponse(Uint8List pcmData) {
+    _cancelLatencyPing();
+    
     if (kIsWeb) {
       _isPlaying = true;
       notifyListeners();
@@ -147,6 +157,7 @@ class AudioService extends ChangeNotifier {
     }
     
     _isPlaying = false;
+    _resetLatencyTimer(); // Agent stopped, we are listening again
     notifyListeners();
   }
 
@@ -180,7 +191,50 @@ class AudioService extends ChangeNotifier {
 
     _isPlaying = false;
     _isProcessingBuffer = false;
+    _resetLatencyTimer(); // Agent finished processing buffer
     notifyListeners();
+  }
+
+  // --- Latency Confidence "Sonar Ping" ---
+  
+  void _resetLatencyTimer() {
+    _cancelLatencyPing();
+    if (!_isRecording) return;
+    
+    // If agent is silent for 4 seconds while active, start pinging
+    _latencyTimer = Timer(const Duration(seconds: 4), () {
+      _startPinging();
+    });
+  }
+
+  void _startPinging() {
+    if (!_isRecording || _isPlaying) return;
+    
+    debugPrint('AudioService: High latency detected, starting confidence ping');
+    
+    if (kIsWeb) {
+      _pingLoopTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+        if (!_isPlaying) _playWebSonarPing();
+      });
+      _playWebSonarPing();
+    }
+  }
+
+  void _cancelLatencyPing() {
+    _latencyTimer?.cancel();
+    _latencyTimer = null;
+    _pingLoopTimer?.cancel();
+    _pingLoopTimer = null;
+  }
+  
+  void _playWebSonarPing() {
+    // Generate a subtle ping using WebAudioBridge if needed.
+    // In our implementation, we'll try to invoke playPing if it exists, or just log.
+    try {
+      web_audio.WebAudioBridge.playPing();
+    } catch (_) {
+      // Fallback if not specifically implemented
+    }
   }
 
   @override

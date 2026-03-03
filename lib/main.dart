@@ -15,6 +15,8 @@ import 'services/audio_service.dart';
 import 'services/ocr_service.dart';
 import 'services/screen_navigator_service.dart';
 import 'services/light_meter_service.dart';
+import 'services/screen_capture_service.dart';
+import 'services/clinical_telemetry_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/caregiver_dashboard.dart';
 import 'screens/doctor_dashboard.dart';
@@ -71,23 +73,35 @@ class GozAIApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => OcrService()),
         ChangeNotifierProvider(create: (_) => ScreenNavigatorService()),
         ChangeNotifierProvider(create: (_) => LightMeterService()),
+        ChangeNotifierProvider(create: (_) => ScreenCaptureService()),
+        ChangeNotifierProvider(create: (_) => ClinicalTelemetryService()),
       ],
-      child: MaterialApp.router(
-        title: 'GozAI',
-        debugShowCheckedModeBanner: false,
-        theme: GozAITheme.darkTheme,
-        routerConfig: _router,
+      child: Consumer<ScreenCaptureService>(
+        builder: (context, screenCapture, child) {
+          return MaterialApp.router(
+            title: 'GozAI',
+            debugShowCheckedModeBanner: false,
+            theme: GozAITheme.darkTheme,
+            routerConfig: _router,
 
-        // Accessibility configuration
-        builder: (context, child) {
-          return MediaQuery(
-            // Enforce minimum text scaling for accessibility
-            data: MediaQuery.of(context).copyWith(
-              textScaler: TextScaler.linear(
-                MediaQuery.of(context).textScaler.scale(1.0).clamp(1.0, 2.0),
-              ),
-            ),
-            child: child!,
+            // Accessibility configuration
+            builder: (context, routerChild) {
+              final content = MediaQuery(
+                // Enforce minimum text scaling for accessibility
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(
+                    MediaQuery.of(context).textScaler.scale(1.0).clamp(1.0, 2.0),
+                  ),
+                ),
+                child: routerChild!,
+              );
+
+              // Wrap the entire app UI in the screen capture boundary
+              return RepaintBoundary(
+                key: screenCapture.globalKey,
+                child: content,
+              );
+            },
           );
         },
       ),

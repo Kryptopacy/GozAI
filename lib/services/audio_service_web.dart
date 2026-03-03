@@ -153,4 +153,26 @@ class WebAudioBridge {
     
     debugPrint('WebAudioBridge: Recording stopped and graph dismantled.');
   }
+
+  /// Synthesizes a subtle, high-tech ping sound indicating the AI is thinking.
+  static void playPing() {
+    try {
+      final ctx = _playbackContext ?? web.AudioContext();
+      final oscillator = ctx.createOscillator();
+      final gain = ctx.createGain();
+
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 880.0; // A5 note
+
+      // Gentle ping envelope
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.1, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + 0.3);
+    } catch (_) {}
+  }
 }

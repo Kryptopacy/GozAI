@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/app_config.dart';
@@ -51,6 +52,8 @@ class GeminiLiveService extends ChangeNotifier {
   void Function()? onCaptureSnapshot;
   void Function()? onDisconnect;
   void Function(String pattern)? onTriggerHaptic;
+  void Function(bool on)? onToggleFlashlight;
+  void Function()? onInterrupted; // Callback for True Interruption (Barge-in)
 
   // Public getters
   GeminiConnectionState get connectionState => _connectionState;
@@ -205,7 +208,7 @@ class GeminiLiveService extends ChangeNotifier {
               },
               {
                 'name': 'triggerHaptic',
-                'description': 'Triggers a haptic vibration pattern on the device to communicate urgency non-visually. Call this proactively when you detect a hazard (pattern: hazard), a person approaching (pattern: person), or as a navigation cue (pattern: navigate). Do NOT wait for the user to ask.',
+                'description': 'Triggers a haptic vibration pattern on the device to communicate urgency non-visually. Call this proactively when you POSITIVELY detect a hazard (pattern: hazard), a person approaching (pattern: person), or as a navigation cue (pattern: navigate). Do NOT wait for the user to ask. ONLY trigger this if you can actively see the video stream. Do NOT trigger this if you cannot see or are guessing.',
                 'parameters': {
                   'type': 'OBJECT',
                   'properties': {
@@ -216,6 +219,38 @@ class GeminiLiveService extends ChangeNotifier {
                     }
                   },
                   'required': ['pattern']
+                }
+              },
+              {
+                'name': 'clickUiElement',
+                'description': 'Taps a specific UI element on the screen in UI NAVIGATOR mode. Use the x and y coordinates of the element you see in the screenshot. Coordinates should be relative to a standard 1080x1920 logical screen, though the relative position is most important.',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'x': {
+                      'type': 'INTEGER',
+                      'description': 'The X coordinate of the element to tap',
+                    },
+                    'y': {
+                      'type': 'INTEGER',
+                      'description': 'The Y coordinate of the element to tap',
+                    },
+                  },
+                  'required': ['x', 'y'],
+                }
+              },
+              {
+                'name': 'toggleFlashlight',
+                'description': 'Turns the device\'s hardware LED flashlight on or off. Use this autonomously if the camera feed is completely black and you cannot see, OR if the user explicitly asks you to turn on the light.',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'on': {
+                      'type': 'BOOLEAN',
+                      'description': 'True to turn the flashlight ON. False to turn it OFF.',
+                    }
+                  },
+                  'required': ['on'],
                 }
               }
             ]
@@ -357,6 +392,7 @@ class GeminiLiveService extends ChangeNotifier {
         // Check if this is an interruption acknowledgment
         if (serverContent['interrupted'] == true) {
           _isModelSpeaking = false;
+          onInterrupted?.call(); // Instantly fire barge-in callback
           notifyListeners();
           return;
         }
@@ -442,6 +478,15 @@ class GeminiLiveService extends ChangeNotifier {
           case 'triggerHaptic':
             final pattern = args['pattern'] as String? ?? 'navigate';
             onTriggerHaptic?.call(pattern);
+            break;
+          case 'clickUiElement':
+            final x = (args['x'] as num?)?.toDouble() ?? 0.0;
+            final y = (args['y'] as num?)?.toDouble() ?? 0.0;
+            _synthesizeTap(x, y);
+            break;
+          case 'toggleFlashlight':
+            final on = args['on'] as bool? ?? false;
+            onToggleFlashlight?.call(on);
             break;
           default:
             debugPrint('GeminiLive: Unknown tool call $name');

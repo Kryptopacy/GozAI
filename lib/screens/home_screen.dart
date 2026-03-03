@@ -15,6 +15,8 @@ import '../services/haptic_service.dart';
 import '../services/ocr_service.dart';
 import '../services/screen_navigator_service.dart';
 import '../services/light_meter_service.dart';
+import '../services/screen_capture_service.dart';
+import '../services/clinical_telemetry_service.dart';
 
 /// The main GozAI interface.
 ///
@@ -34,12 +36,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   StreamSubscription? _frameSubscription;
+  StreamSubscription? _screenCaptureSubscription;
   StreamSubscription? _audioInputSubscription;
   StreamSubscription? _audioOutputSubscription;
   
   // OCR grounding: run offline OCR every N frames to give Gemini text context
   int _ocrFrameCounter = 0;
   static const int _ocrFrameInterval = 3; // Run OCR on every 3rd frame in Read mode
+  
+  // Clinical Telemetry: track how long patients can read before fatigue
+  DateTime? _readingModeStartTime;
 
   @override
   void initState() {
@@ -64,6 +70,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final geminiService = context.read<GeminiLiveService>();
     final audioService = context.read<AudioService>();
     final screenNav = context.read<ScreenNavigatorService>();
+    final screenCapture = context.read<ScreenCaptureService>();
 
     // Initialize camera
     await cameraService.initialize();
@@ -89,6 +96,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       HapticService.tap();
     };
     geminiService.onSwitchMode = (mode) {
+      // Telemetry: Log reading stamina if we are leaving reading mode
+      if (geminiService.currentMode == GozAIMode.reading && mode != GozAIMode.reading) {
+        if (_readingModeStartTime != null) {
+          final duration = DateTime.now().difference(_readingModeStartTime!);
+          context.read<ClinicalTelemetryService>().logReadingStamina(duration);
+          _readingModeStartTime = null;
+        }
+      } else if (mode == GozAIMode.reading) {
+        _readingModeStartTime = DateTime.now();
+      }
+
       geminiService.switchMode(mode);
       HapticService.modeSwitch();
     };
@@ -99,8 +117,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _toggleSession(geminiService, audioService); // Safely turns off everything
     };
     geminiService.onTriggerHaptic = (pattern) {
+      final telemetry = context.read<ClinicalTelemetryService>();
       switch (pattern) {
         case 'hazard':
+          telemetry.logHazardDetected(pattern);
           HapticService.hazardWarning();
           break;
         case 'person':
@@ -111,9 +131,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           break;
       }
     };
+    
+    // Wire hardware flashlight control
+    geminiService.onToggleFlashlight = (on) {
+      final camera = context.read<CameraService>();
+      camera.toggleFlashlight(on);
+    };
+    
+    // True Interruption (Barge-in): instantly flush audio if Gemini detects user speech
+    geminiService.onInterrupted = () {
+      audioService.stopPlayback();
+    };
 
     // Wire camera frames → Gemini (with OCR grounding in Read mode)
     _frameSubscription = cameraService.frameStream.listen((frame) {
+      if (geminiService.currentMode == GozAIMode.uiNav) return; // UI nav uses screen frames
+      
       geminiService.sendVideoFrame(frame);
       // In Read mode, run offline OCR every N frames and send extracted text
       // as grounding context so Gemini is anchored to actual on-screen characters.
@@ -126,6 +159,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       } else {
         _ocrFrameCounter = 0; // Reset when not in reading mode
       }
+    });
+
+    // Wire internal UI frames → Gemini (For UI Navigator mode)
+    _screenCaptureSubscription = screenCapture.frameStream.listen((frame) {
+      if (geminiService.currentMode != GozAIMode.uiNav) return;
+      geminiService.sendVideoFrame(frame); // Gemini sees the UI as the camera
     });
 
     // Wire audio input → Gemini
@@ -144,6 +183,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void dispose() {
     _pulseController.dispose();
     _frameSubscription?.cancel();
+    _screenCaptureSubscription?.cancel();
     _audioInputSubscription?.cancel();
     _audioOutputSubscription?.cancel();
     super.dispose();
@@ -400,6 +440,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         label: '$label mode${isActive ? ", currently active" : ""}',
         child: InkWell(
           onTap: () {
+            // Log spatial wandering if modes are cycled too fast
+            context.read<ClinicalTelemetryService>().logSpatialDisorientation();
+
+            // Telemetry: Log reading stamina if leaving
+            if (gemini.currentMode == GozAIMode.reading && mode != GozAIMode.reading) {
+              if (_readingModeStartTime != null) {
+                final duration = DateTime.now().difference(_readingModeStartTime!);
+                context.read<ClinicalTelemetryService>().logReadingStamina(duration);
+                _readingModeStartTime = null;
+              }
+            } else if (mode == GozAIMode.reading && gemini.currentMode != GozAIMode.reading) {
+              _readingModeStartTime = DateTime.now();
+            }
+
             gemini.switchMode(mode);
             HapticService.modeSwitch();
           },
@@ -450,7 +504,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       await audio.stopRecording();
       if (!mounted) return;
       final cameraService = context.read<CameraService>();
+      final screenCapture = context.read<ScreenCaptureService>();
       cameraService.stopStreaming();
+      screenCapture.stopStreaming();
       // Stop light meter if active
       context.read<LightMeterService>().stop();
       await gemini.disconnect();
@@ -469,7 +525,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       await audio.startRecording();
       if (!mounted) return;
       final cameraService = context.read<CameraService>();
-      cameraService.startStreaming();
+      final screenCapture = context.read<ScreenCaptureService>();
+      
+      if (gemini.currentMode == GozAIMode.uiNav) {
+        cameraService.stopStreaming();
+        screenCapture.startStreaming();
+      } else {
+        screenCapture.stopStreaming();
+        cameraService.startStreaming();
+      }
       
       if (cameraService.initFailed || !cameraService.isInitialized) {
         // Force the model into strict blind mode since the camera threw an exception (e.g. privacy shutter)
@@ -509,9 +573,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   ) async {
     if (!gemini.isConnected || !mounted) return;
     final ocrService = context.read<OcrService>();
+    final telemetry = context.read<ClinicalTelemetryService>();
+    final lightMeter = context.read<LightMeterService>();
+    
     try {
       final result = await ocrService.recognizeFromBytes(frame);
       if (result.isNotEmpty) {
+        // Clinical Telemetry: Track contrast demand (how much light they needed)
+        telemetry.logOcrAssist(lightMeter.currentLux, result.fullText.length);
+
         // Send OCR text as a silent system grounding prefix
         gemini.sendText(
           '[OCR Context — do not read this aloud unless the user asks]: '

@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'dart:math';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 import '../core/app_config.dart';
 
@@ -16,8 +19,15 @@ class CameraService extends ChangeNotifier {
   bool _isStreaming = false;
   bool _initFailed = false;
   bool _isCapturing = false;
+  bool _isCapturing = false;
   Timer? _frameTimer;
   double _fps = AppConfig.cameraFps;
+
+  // Battery Saver / Motion Tracking
+  StreamSubscription<AccelerometerEvent>? _accelSub;
+  double _lastAccelMagnitude = 9.8;
+  DateTime _lastMotionTime = DateTime.now();
+  bool _isBatterySaverActive = false;
 
   // Stream controller for JPEG frames
   final StreamController<Uint8List> _frameController =
@@ -82,18 +92,33 @@ class CameraService extends ChangeNotifier {
     if (!isInitialized || _isStreaming) return;
 
     _isStreaming = true;
+    _startMotionTracker();
     notifyListeners();
 
-    final interval = Duration(milliseconds: (1000 / _fps).round());
-    _frameTimer = Timer.periodic(interval, (_) => _captureFrame());
+    _scheduleNextFrame();
 
-    debugPrint('CameraService: Streaming at $_fps FPS');
+    debugPrint('CameraService: Streaming starting');
+  }
+
+  void _scheduleNextFrame() {
+    if (!_isStreaming) return;
+    
+    // Check battery saver state: 0.2 FPS (every 5 seconds) if resting, otherwise 1 FPS
+    final targetFps = _isBatterySaverActive ? 0.2 : _fps;
+    final interval = Duration(milliseconds: (1000 / targetFps).round());
+    
+    _frameTimer?.cancel();
+    _frameTimer = Timer(interval, () async {
+      await _captureFrame();
+      _scheduleNextFrame();
+    });
   }
 
   /// Stop continuous frame streaming.
   void stopStreaming() {
     _frameTimer?.cancel();
     _frameTimer = null;
+    _accelSub?.cancel();
     _isStreaming = false;
     notifyListeners();
     debugPrint('CameraService: Streaming stopped');
@@ -135,9 +160,41 @@ class CameraService extends ChangeNotifier {
   void setFps(double fps) {
     _fps = fps;
     if (_isStreaming) {
-      stopStreaming();
-      startStreaming();
+      _scheduleNextFrame();
     }
+  }
+
+  // --- Sensary Integrations for Master Polish ---
+
+  void _startMotionTracker() {
+    if (kIsWeb) return; // Sensors unsupported on web usually
+    
+    _accelSub?.cancel();
+    _accelSub = accelerometerEventStream().listen((event) {
+      // Calculate magnitude of acceleration vector
+      final magnitude = sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
+      
+      // Calculate delta from exactly 1g (9.8 m/s^2)
+      final delta = (magnitude - 9.8).abs();
+      
+      // If there is significant motion (jitter / walking)
+      if (delta > 0.5) {
+        _lastMotionTime = DateTime.now();
+        if (_isBatterySaverActive) {
+          _isBatterySaverActive = false;
+          _scheduleNextFrame(); // Instantly ramp back up to 1 FPS
+          debugPrint('CameraService: Motion detected -> 1 FPS');
+        }
+      } else {
+        // If still for more than 5 seconds, engage battery saver
+        if (!_isBatterySaverActive && DateTime.now().difference(_lastMotionTime).inSeconds >= 5) {
+          _isBatterySaverActive = true;
+          debugPrint('CameraService: Resting -> 0.2 FPS (Battery Saver On)');
+        }
+      }
+      
+      _lastAccelMagnitude = magnitude;
+    });
   }
 
   /// Switch between front and rear cameras.
@@ -163,6 +220,17 @@ class CameraService extends ChangeNotifier {
     notifyListeners();
 
     if (wasStreaming) startStreaming();
+  }
+
+  /// Toggle the camera LED flashlight on or off.
+  Future<void> toggleFlashlight(bool on) async {
+    if (!isInitialized || kIsWeb) return;
+    try {
+      await _controller!.setFlashMode(on ? FlashMode.torch : FlashMode.off);
+      debugPrint('CameraService: Flashlight toggled ${on ? 'ON' : 'OFF'}');
+    } catch (e) {
+      debugPrint('CameraService: Flashlight toggle failed: $e');
+    }
   }
 
   @override
