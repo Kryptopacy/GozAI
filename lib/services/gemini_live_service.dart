@@ -33,6 +33,9 @@ class GeminiLiveService extends ChangeNotifier {
   GozAIMode _currentMode = GozAIMode.scene;
   String _statusMessage = 'Tap to connect';
   bool _isModelSpeaking = false;
+  
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectAttempts = 5;
 
   // Stream controllers for outbound data
   final StreamController<String> _transcriptController =
@@ -41,6 +44,12 @@ class GeminiLiveService extends ChangeNotifier {
       StreamController<Uint8List>.broadcast();
   final StreamController<String> _statusController =
       StreamController<String>.broadcast();
+
+  // Callbacks for voice-activated intents (Gemini Function Calling)
+  void Function()? onSwitchCamera;
+  void Function(GozAIMode)? onSwitchMode;
+  void Function()? onCaptureSnapshot;
+  void Function()? onDisconnect;
 
   // Public getters
   GeminiConnectionState get connectionState => _connectionState;
@@ -69,12 +78,18 @@ class GeminiLiveService extends ChangeNotifier {
     _setStatus('Connecting to GozAI...');
 
     try {
-      final uri = Uri.parse(AppConfig.geminiLiveWsUrl);
+      final wsUrl = AppConfig.geminiLiveWsUrl;
+      debugPrint('GeminiLive: Connecting to $wsUrl');
+      final uri = Uri.parse(wsUrl);
       _channel = WebSocketChannel.connect(uri);
+
+      // Wait for the WebSocket handshake to complete.
+      // This throws if the handshake fails (e.g., 403 auth error).
       await _channel!.ready;
 
       _setConnectionState(GeminiConnectionState.connected);
       _setStatus('Connected');
+      _reconnectAttempts = 0;
 
       // Send setup message with system prompt
       _sendSetupMessage();
@@ -83,20 +98,47 @@ class GeminiLiveService extends ChangeNotifier {
       _channel!.stream.listen(
         _handleMessage,
         onError: (error) {
-          debugPrint('GeminiLive WebSocket error: $error');
+          debugPrint('GeminiLive WebSocket error: $error (type: ${error.runtimeType})');
           _setConnectionState(GeminiConnectionState.error);
-          _setStatus('Connection error');
+          _setStatus('Connection error: $error');
+          _scheduleReconnect();
         },
         onDone: () {
-          debugPrint('GeminiLive WebSocket closed');
+          final closeCode = _channel?.closeCode;
+          final closeReason = _channel?.closeReason;
+          debugPrint(
+              'GeminiLive WebSocket closed. Code: $closeCode, Reason: $closeReason');
           _setConnectionState(GeminiConnectionState.disconnected);
-          _setStatus('Disconnected');
+          _setStatus('Disconnected (code: $closeCode)');
+          _scheduleReconnect();
         },
+        cancelOnError: false,
       );
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('GeminiLive connection failed: $e');
+      debugPrint('Stack: $stack');
       _setConnectionState(GeminiConnectionState.error);
-      _setStatus('Failed to connect');
+      _setStatus('Failed to connect: $e');
+      _scheduleReconnect();
+    }
+  }
+
+  /// Attempt to reconnect using exponential backoff
+  void _scheduleReconnect() {
+    if (_reconnectAttempts < _maxReconnectAttempts) {
+      _reconnectAttempts++;
+      final backoff = Duration(seconds: 2 * _reconnectAttempts);
+      debugPrint('GeminiLive: Reconnecting in ${backoff.inSeconds} seconds (Attempt $_reconnectAttempts/$_maxReconnectAttempts)...');
+      _setStatus('Reconnecting in ${backoff.inSeconds}s...');
+      
+      Future.delayed(backoff, () {
+        if (_connectionState == GeminiConnectionState.disconnected || 
+            _connectionState == GeminiConnectionState.error) {
+          connect();
+        }
+      });
+    } else {
+      _setStatus('Failed to reconnect after $_maxReconnectAttempts attempts');
     }
   }
 
@@ -130,6 +172,39 @@ class GeminiLiveService extends ChangeNotifier {
             {'text': systemInstruction},
           ],
         },
+        'tools': [
+          {
+            'functionDeclarations': [
+              {
+                'name': 'switchCamera',
+                'description': 'Switches or flips the user\'s camera (e.g., from front to back, or back to front). Call this when the user asks to switch the camera, flip the camera, or look at them.',
+              },
+              {
+                'name': 'switchMode',
+                'description': 'Switches the application mode (e.g., to scene, reading, screen, or light meter).',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'mode': {
+                      'type': 'STRING',
+                      'description': 'The mode to switch to. Must be one of: scene, reading, uiNav, lightMeter',
+                      'enum': ['scene', 'reading', 'uiNav', 'lightMeter']
+                    }
+                  },
+                  'required': ['mode']
+                }
+              },
+              {
+                'name': 'captureSnapshot',
+                'description': 'Takes a high-resolution snapshot photo for detailed analysis. Call this when the user explicitly asks to take a picture, snap a photo, or look closely at something.',
+              },
+              {
+                'name': 'disconnectSession',
+                'description': 'Gracefully hangs up and ends the current GozAI session. Call this when the user says goodbye, stop listening, or asks you to turn off.',
+              }
+            ]
+          }
+        ],
       },
     };
 
@@ -234,8 +309,17 @@ class GeminiLiveService extends ChangeNotifier {
   /// Handle incoming WebSocket messages from Gemini.
   void _handleMessage(dynamic message) {
     try {
-      final data = jsonDecode(message as String) as Map<String, dynamic>;
-
+      String messageStr;
+      if (message is String) {
+        messageStr = message;
+      } else if (message is List<int>) {
+        messageStr = utf8.decode(message);
+      } else {
+        debugPrint('GeminiLive: Unknown message type: ${message.runtimeType}');
+        return;
+      }
+      
+      final data = jsonDecode(messageStr) as Map<String, dynamic>;
       // Handle setup complete
       if (data.containsKey('setupComplete')) {
         debugPrint('GeminiLive setup complete');
@@ -269,10 +353,14 @@ class GeminiLiveService extends ChangeNotifier {
             for (final part in parts) {
               final partMap = part as Map<String, dynamic>;
 
-              // Text response
+              // Text response — log only, do not surface to UI.
+              // The model's text track contains chain-of-thought reasoning
+              // which is meaningless to a blind user. All information is
+              // delivered via audio. Keeping this in logs for debugging.
               if (partMap.containsKey('text')) {
                 final text = partMap['text'] as String;
-                _transcriptController.add(text);
+                debugPrint('GeminiLive [text]: $text');
+                // Intentionally NOT pushed to _transcriptController
               }
 
               // Audio response (inline data)
@@ -300,15 +388,74 @@ class GeminiLiveService extends ChangeNotifier {
     }
   }
 
-  /// Handle tool calls from Gemini (intent routing to ADK backend).
+  /// Handle tool calls from Gemini (intent routing to Local App Actions or ADK backend).
   void _handleToolCall(Map<String, dynamic> toolCall) {
-    // TODO: Route to ADK backend for optometry RAG, SOS, etc.
-    debugPrint('Tool call received: ${toolCall['functionCalls']}');
+    if (!toolCall.containsKey('functionCalls')) return;
+    final functionCalls = toolCall['functionCalls'] as List<dynamic>;
+    
+    final functionResponses = [];
+
+    for (final call in functionCalls) {
+      final functionCallMap = call as Map<String, dynamic>;
+      final callId = functionCallMap['id'] as String;
+      final name = functionCallMap['name'] as String;
+      final args = functionCallMap['args'] as Map<String, dynamic>? ?? {};
+
+      debugPrint('GeminiLive: Executing tool call: $name');
+
+      bool success = true;
+      try {
+        switch (name) {
+          case 'switchCamera':
+            onSwitchCamera?.call();
+            break;
+          case 'switchMode':
+            final modeStr = args['mode'] as String?;
+            final newMode = GozAIMode.values.firstWhere(
+              (e) => e.name == modeStr,
+              orElse: () => _currentMode,
+            );
+            onSwitchMode?.call(newMode);
+            break;
+          case 'captureSnapshot':
+            onCaptureSnapshot?.call();
+            break;
+          case 'disconnectSession':
+            onDisconnect?.call();
+            break;
+          default:
+            debugPrint('GeminiLive: Unknown tool call $name');
+            success = false;
+        }
+      } catch (e) {
+        debugPrint('GeminiLive: Error executing tool call $name: $e');
+        success = false;
+      }
+
+      functionResponses.add({
+        'id': callId,
+        'name': name,
+        'response': {
+          'result': success ? 'Success' : 'Failed to execute tool',
+        }
+      });
+    }
+
+    // Send the tool execution results back to Gemini so it can resume speaking
+    if (functionResponses.isNotEmpty) {
+      _sendJson({
+        'toolResponse': {
+          'functionResponses': functionResponses,
+        }
+      });
+    }
   }
 
   /// Send a JSON message over the WebSocket.
+  /// Guards against sending on a closed/closing socket to avoid
+  /// "WebSocket is already in CLOSING or CLOSED state" errors.
   void _sendJson(Map<String, dynamic> message) {
-    if (_channel == null) return;
+    if (_channel == null || !isConnected) return;
     _channel!.sink.add(jsonEncode(message));
   }
 

@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>GozAI needs camera access to analyze your environment and provide scene context.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>GozAI needs microphone access to hear your questions and commands.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

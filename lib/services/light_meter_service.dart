@@ -51,13 +51,14 @@ class LightMeterService extends ChangeNotifier {
     _isActive = true;
     notifyListeners();
 
-    // Use accelerometer as a proxy for device orientation
-    // Combined with camera brightness estimation for actual lux
-    _sensorSubscription = accelerometerEventStream().listen((event) {
-      // Calculate device tilt angle (used for orientation feedback)
-      final tilt = atan2(event.y, event.z) * (180 / pi);
-      _updateOrientationFeedback(tilt);
-    });
+    // Accelerometer sensor is not available on web
+    if (!kIsWeb) {
+      _sensorSubscription = accelerometerEventStream().listen((event) {
+        // Calculate device tilt angle (used for orientation feedback)
+        final tilt = atan2(event.y, event.z) * (180 / pi);
+        _updateOrientationFeedback(tilt);
+      });
+    }
 
     // Periodically estimate ambient light from camera exposure
     _toneTimer = Timer.periodic(

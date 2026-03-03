@@ -1,0 +1,3 @@
+4c8fd20 chore: remove chrome/windows binaries, update .gitignore
+12199da feat: RAG semantic search, streaming optimizations, Firebase MCP integration
+70a8581 feat: initial GozAI scaffold - Gemini Live API, ADK backend, accessibility UI

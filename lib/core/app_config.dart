@@ -6,12 +6,14 @@ class AppConfig {
   static String get firebaseProjectId =>
       dotenv.env['FIREBASE_PROJECT_ID'] ?? 'gozai-app';
 
-  /// Gemini Multimodal Live API WebSocket endpoint
+  /// Gemini Multimodal Live API WebSocket endpoint.
+  /// BidiGenerateContent WebSocket utilizes v1alpha for the native audio preview model.
   static String get geminiLiveWsUrl =>
-      'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$geminiApiKey';
+      'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=$geminiApiKey';
 
-  /// Gemini model for multimodal live
-  static const String geminiModel = 'models/gemini-2.0-flash-live-001';
+  /// Gemini model for multimodal live.
+  /// bidiGenerateContent endpoint on v1alpha.
+  static const String geminiModel = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
 
   /// Camera frame rate for continuous monitoring (frames per second)
   static const double cameraFps = 1.0;

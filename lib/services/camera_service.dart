@@ -9,10 +9,13 @@ import '../core/app_config.dart';
 ///
 /// Captures frames from the rear camera at configurable FPS and converts
 /// them to JPEG format for streaming to Gemini Live API.
+/// On web, camera initialization may require user permission via browser prompt.
 class CameraService extends ChangeNotifier {
   CameraController? _controller;
   List<CameraDescription> _cameras = [];
   bool _isStreaming = false;
+  bool _initFailed = false;
+  bool _isCapturing = false;
   Timer? _frameTimer;
   double _fps = AppConfig.cameraFps;
 
@@ -23,33 +26,55 @@ class CameraService extends ChangeNotifier {
   // Public getters
   bool get isInitialized => _controller?.value.isInitialized ?? false;
   bool get isStreaming => _isStreaming;
+  bool get initFailed => _initFailed;
   CameraController? get controller => _controller;
   Stream<Uint8List> get frameStream => _frameController.stream;
 
   /// Initialize the camera (prefer rear camera).
   Future<void> initialize() async {
-    _cameras = await availableCameras();
-    if (_cameras.isEmpty) {
-      debugPrint('CameraService: No cameras available');
-      return;
+    try {
+      _cameras = await availableCameras();
+      if (_cameras.isEmpty) {
+        debugPrint('CameraService: No cameras available');
+        _initFailed = true;
+        notifyListeners();
+        return;
+      }
+
+      // On mobile we prefer the rear camera for scene analysis.
+      // On web/PC, webcams often report as external, front, or unknown.
+      CameraDescription camera;
+      if (kIsWeb) {
+        // On web just take the first available (usually the default webcam)
+        camera = _cameras.first;
+      } else {
+        camera = _cameras.firstWhere(
+          (c) => c.lensDirection == CameraLensDirection.back,
+          orElse: () => _cameras.first,
+        );
+      }
+
+      // ImageFormatGroup.jpeg is NOT supported on Flutter web and causes
+      // a CameraException(cameraNotReadable) hardware error. Omit it on web.
+      // Furthermore, requesting ResolutionPreset.low or medium on Web often causes
+      // cameraNotReadable because of rigid hardware constraints. Max allows negotiation.
+      _controller = CameraController(
+        camera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: kIsWeb ? ImageFormatGroup.unknown : ImageFormatGroup.jpeg,
+      );
+
+      await _controller!.initialize();
+      _initFailed = false;
+      notifyListeners();
+      debugPrint('CameraService: Initialized with ${camera.name}');
+    } catch (e) {
+      debugPrint('CameraService: Initialization failed: $e');
+      _initFailed = true;
+      _controller = null;
+      notifyListeners();
     }
-
-    // Prefer rear camera for scene analysis
-    final camera = _cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.back,
-      orElse: () => _cameras.first,
-    );
-
-    _controller = CameraController(
-      camera,
-      ResolutionPreset.medium, // Balance quality vs. bandwidth
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.jpeg,
-    );
-
-    await _controller!.initialize();
-    notifyListeners();
-    debugPrint('CameraService: Initialized with ${camera.name}');
   }
 
   /// Start continuous frame streaming at configured FPS.
@@ -91,8 +116,9 @@ class CameraService extends ChangeNotifier {
 
   /// Capture a frame and emit it to the stream.
   Future<void> _captureFrame() async {
-    if (!isInitialized || !_isStreaming) return;
+    if (!isInitialized || !_isStreaming || _isCapturing) return;
 
+    _isCapturing = true;
     try {
       final xFile = await _controller!.takePicture();
       final bytes = await xFile.readAsBytes();
@@ -100,6 +126,8 @@ class CameraService extends ChangeNotifier {
     } catch (e) {
       // Frame capture can fail intermittently, don't crash
       debugPrint('CameraService: Frame capture error: $e');
+    } finally {
+      _isCapturing = false;
     }
   }
 
@@ -116,11 +144,10 @@ class CameraService extends ChangeNotifier {
   Future<void> switchCamera() async {
     if (_cameras.length < 2) return;
 
-    final currentDirection = _controller?.description.lensDirection;
-    final newCamera = _cameras.firstWhere(
-      (c) => c.lensDirection != currentDirection,
-      orElse: () => _cameras.first,
-    );
+    // Switch to the next available camera in the list
+    final currentIndex = _cameras.indexWhere((c) => c.name == _controller?.description.name);
+    final nextIndex = (currentIndex + 1) % _cameras.length;
+    final newCamera = _cameras[nextIndex];
 
     final wasStreaming = _isStreaming;
     if (wasStreaming) stopStreaming();
@@ -130,7 +157,7 @@ class CameraService extends ChangeNotifier {
       newCamera,
       ResolutionPreset.medium,
       enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.jpeg,
+      imageFormatGroup: kIsWeb ? ImageFormatGroup.unknown : ImageFormatGroup.jpeg,
     );
     await _controller!.initialize();
     notifyListeners();

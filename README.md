@@ -77,7 +77,7 @@ Low vision affects over **2.2 billion people globally** (WHO). Existing assistiv
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/GozAI.git
+git clone https://github.com/Kryptopacy/GozAI.git
 cd GozAI
 
 # Configure environment

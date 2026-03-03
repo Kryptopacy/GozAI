@@ -1,7 +1,17 @@
 import google.genai as genai
 from google.adk import Agent
+from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
+from mcp import StdioServerParameters
 
 from .tools import search_optometry_guidelines, send_sos_alert, get_medication_info
+
+# Initialize Firebase MCP Toolset
+firebase_mcp_toolset = McpToolset(
+    connection_params=StdioServerParameters(
+        command="npx",
+        args=["-y", "firebase-mcp-server"],
+    )
+)
 
 
 # GozAI ADK Agent — Backend orchestrator for intent routing
@@ -34,5 +44,6 @@ root_agent = Agent(
         search_optometry_guidelines,
         send_sos_alert,
         get_medication_info,
+        firebase_mcp_toolset,
     ],
 )

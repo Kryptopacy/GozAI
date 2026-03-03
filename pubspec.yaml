@@ -11,7 +11,7 @@ dependencies:
     sdk: flutter
 
   # Firebase
-  firebase_core: any
+  firebase_core: ^4.4.0
   firebase_auth: any
   cloud_firestore: any
 
@@ -24,6 +24,9 @@ dependencies:
 
   # WebSocket for Gemini Live API
   web_socket_channel: any
+
+  # Browser APIs (for web platform audio/JS interop)
+  web: any
 
   # ML Kit (offline OCR)
   google_mlkit_text_recognition: any
@@ -39,6 +42,8 @@ dependencies:
   path_provider: any
   uuid: any
   cupertino_icons: any
+  google_fonts: any
+  go_router: any
 
 dev_dependencies:
   flutter_test:

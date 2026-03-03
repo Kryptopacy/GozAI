@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+
+import 'package:go_router/go_router.dart';
+
+import 'firebase_options.dart';
 
 import 'core/theme.dart';
 import 'core/app_config.dart';
@@ -11,9 +16,16 @@ import 'services/ocr_service.dart';
 import 'services/screen_navigator_service.dart';
 import 'services/light_meter_service.dart';
 import 'screens/home_screen.dart';
+import 'screens/caregiver_dashboard.dart';
+import 'screens/doctor_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase using the generated options
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   // Load environment configuration
   await dotenv.load(fileName: '.env');
@@ -23,8 +35,27 @@ void main() async {
     debugPrint('ERROR: Missing GEMINI_API_KEY in .env file');
   }
 
-  runApp(const GozAIApp());
+  runApp(GozAIApp());
 }
+
+/// GozAI — Premium Navigation Router
+final GoRouter _router = GoRouter(
+  initialLocation: '/',
+  routes: [
+    GoRoute(
+      path: '/',
+      builder: (context, state) => const HomeScreen(),
+    ),
+    GoRoute(
+      path: '/caregiver',
+      builder: (context, state) => const CaregiverDashboard(),
+    ),
+    GoRoute(
+      path: '/doctor',
+      builder: (context, state) => const DoctorDashboard(),
+    ),
+  ],
+);
 
 /// GozAI — AI Accessibility Copilot for Low-Vision Patients
 class GozAIApp extends StatelessWidget {
@@ -41,11 +72,11 @@ class GozAIApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ScreenNavigatorService()),
         ChangeNotifierProvider(create: (_) => LightMeterService()),
       ],
-      child: MaterialApp(
+      child: MaterialApp.router(
         title: 'GozAI',
         debugShowCheckedModeBanner: false,
         theme: GozAITheme.darkTheme,
-        home: const HomeScreen(),
+        routerConfig: _router,
 
         // Accessibility configuration
         builder: (context, child) {
