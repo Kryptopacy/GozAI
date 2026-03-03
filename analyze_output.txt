@@ -1,0 +1,10 @@
+Analyzing GozAI...                                              
+
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home_screen.dart:76:24 - use_build_context_synchronously
+  error - Undefined name 'web' - lib\screens\home_screen.dart:563:19 - undefined_identifier
+warning - 'StreamAudioSource' is experimental and could be removed or changed at any time - lib\services\audio_service.dart:233:31 - experimental_member_use
+warning - 'StreamAudioResponse' is experimental and could be removed or changed at any time - lib\services\audio_service.dart:238:10 - experimental_member_use
+warning - 'StreamAudioResponse' is experimental and could be removed or changed at any time - lib\services\audio_service.dart:241:12 - experimental_member_use
+  error - The method 'connectNode' isn't defined for the type 'OscillatorNode' - lib\services\haptic_service.dart:44:18 - undefined_method
+  error - The method 'connectNode' isn't defined for the type 'GainNode' - lib\services\haptic_service.dart:45:16 - undefined_method
+

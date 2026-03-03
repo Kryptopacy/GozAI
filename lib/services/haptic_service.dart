@@ -1,24 +1,83 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
+import 'package:web/web.dart' as web;
 
 /// Service for structured haptic feedback patterns.
 ///
 /// Provides distinct vibration patterns for different alert types,
 /// allowing non-visual communication of state changes and hazards.
+///
+/// Platform support:
+/// - **iOS Native**: Uses UIFeedbackGenerator / CoreHaptics via Flutter's
+///   HapticFeedback class. Full support.
+/// - **Android Native**: Uses the `vibration` package for custom patterns.
+///   Full support including intensity levels.
+/// - **iOS/Android Web (Safari/Chrome)**: navigator.vibrate() is blocked on
+///   iOS Safari. We use a timed Web Audio API oscillator burst (20–120ms) as
+///   a tactile substitute. This creates an audible+physical "click" sensation
+///   via the speaker which is the accepted web workaround.
 class HapticService {
+  /// Play a short Web Audio oscillator burst as a haptic substitute on web.
+  /// Frequency and duration map to perceived "weight" of the feedback.
+  static void _webAudioClick({double frequency = 200.0, int durationMs = 20}) {
+    if (!kIsWeb) return;
+    try {
+      final ctx = web.AudioContext();
+      final oscillator = ctx.createOscillator();
+      final gainNode = ctx.createGain();
+
+      oscillator.type = 'sine';
+      oscillator.frequency.value = frequency;
+
+      // Fast attack, immediate decay — sounds + feels like a tap
+      gainNode.gain.setValueAtTime(0.001, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(
+        0.5,
+        ctx.currentTime + 0.005,
+      );
+      gainNode.gain.exponentialRampToValueAtTime(
+        0.001,
+        ctx.currentTime + durationMs / 1000.0,
+      );
+
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + durationMs / 1000.0);
+    } catch (e) {
+      debugPrint('HapticService: Web Audio fallback failed: $e');
+    }
+  }
+
   /// Quick pulse — general acknowledgment
   static Future<void> tap() async {
-    HapticFeedback.lightImpact();
+    if (kIsWeb) {
+      _webAudioClick(frequency: 300.0, durationMs: 20);
+    } else {
+      HapticFeedback.lightImpact();
+    }
   }
 
   /// Strong single buzz — attention needed
   static Future<void> alert() async {
-    HapticFeedback.heavyImpact();
+    if (kIsWeb) {
+      _webAudioClick(frequency: 150.0, durationMs: 60);
+    } else {
+      HapticFeedback.heavyImpact();
+    }
   }
 
   /// Rapid triple buzz — HAZARD / STOP
   static Future<void> hazardWarning() async {
-    if (await Vibration.hasVibrator() == true) {
+    if (kIsWeb) {
+      // Three rapid clicks with slight pitch drop
+      _webAudioClick(frequency: 180.0, durationMs: 40);
+      Future.delayed(const Duration(milliseconds: 90), () =>
+          _webAudioClick(frequency: 160.0, durationMs: 40));
+      Future.delayed(const Duration(milliseconds: 180), () =>
+          _webAudioClick(frequency: 140.0, durationMs: 40));
+    } else if (await Vibration.hasVibrator() == true) {
       Vibration.vibrate(
         pattern: [0, 100, 50, 100, 50, 100],
         intensities: [0, 255, 0, 255, 0, 255],
@@ -30,7 +89,11 @@ class HapticService {
 
   /// Double tap — person detected
   static Future<void> personDetected() async {
-    if (await Vibration.hasVibrator() == true) {
+    if (kIsWeb) {
+      _webAudioClick(frequency: 260.0, durationMs: 30);
+      Future.delayed(const Duration(milliseconds: 120), () =>
+          _webAudioClick(frequency: 260.0, durationMs: 30));
+    } else if (await Vibration.hasVibrator() == true) {
       Vibration.vibrate(pattern: [0, 80, 120, 80]);
     } else {
       HapticFeedback.mediumImpact();
@@ -39,7 +102,9 @@ class HapticService {
 
   /// Gentle sustained pulse — navigation cue
   static Future<void> navigationCue() async {
-    if (await Vibration.hasVibrator() == true) {
+    if (kIsWeb) {
+      _webAudioClick(frequency: 220.0, durationMs: 50);
+    } else if (await Vibration.hasVibrator() == true) {
       Vibration.vibrate(duration: 200, amplitude: 100);
     } else {
       HapticFeedback.selectionClick();
@@ -48,7 +113,11 @@ class HapticService {
 
   /// Connection state change feedback
   static Future<void> connected() async {
-    if (await Vibration.hasVibrator() == true) {
+    if (kIsWeb) {
+      _webAudioClick(frequency: 350.0, durationMs: 25);
+      Future.delayed(const Duration(milliseconds: 100), () =>
+          _webAudioClick(frequency: 420.0, durationMs: 40));
+    } else if (await Vibration.hasVibrator() == true) {
       Vibration.vibrate(pattern: [0, 50, 100, 150]);
     } else {
       HapticFeedback.mediumImpact();
@@ -57,6 +126,10 @@ class HapticService {
 
   /// Mode switch confirmation
   static Future<void> modeSwitch() async {
-    HapticFeedback.selectionClick();
+    if (kIsWeb) {
+      _webAudioClick(frequency: 280.0, durationMs: 15);
+    } else {
+      HapticFeedback.selectionClick();
+    }
   }
 }

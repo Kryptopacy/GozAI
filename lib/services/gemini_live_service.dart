@@ -50,6 +50,7 @@ class GeminiLiveService extends ChangeNotifier {
   void Function(GozAIMode)? onSwitchMode;
   void Function()? onCaptureSnapshot;
   void Function()? onDisconnect;
+  void Function(String pattern)? onTriggerHaptic;
 
   // Public getters
   GeminiConnectionState get connectionState => _connectionState;
@@ -201,6 +202,21 @@ class GeminiLiveService extends ChangeNotifier {
               {
                 'name': 'disconnectSession',
                 'description': 'Gracefully hangs up and ends the current GozAI session. Call this when the user says goodbye, stop listening, or asks you to turn off.',
+              },
+              {
+                'name': 'triggerHaptic',
+                'description': 'Triggers a haptic vibration pattern on the device to communicate urgency non-visually. Call this proactively when you detect a hazard (pattern: hazard), a person approaching (pattern: person), or as a navigation cue (pattern: navigate). Do NOT wait for the user to ask.',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'pattern': {
+                      'type': 'STRING',
+                      'description': 'The haptic pattern to trigger. Must be one of: hazard, person, navigate',
+                      'enum': ['hazard', 'person', 'navigate']
+                    }
+                  },
+                  'required': ['pattern']
+                }
               }
             ]
           }
@@ -422,6 +438,10 @@ class GeminiLiveService extends ChangeNotifier {
             break;
           case 'disconnectSession':
             onDisconnect?.call();
+            break;
+          case 'triggerHaptic':
+            final pattern = args['pattern'] as String? ?? 'navigate';
+            onTriggerHaptic?.call(pattern);
             break;
           default:
             debugPrint('GeminiLive: Unknown tool call $name');

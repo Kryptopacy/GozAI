@@ -1,0 +1,6 @@
+remote: 
+remote: Create a pull request for 'main' on GitHub by visiting:        
+remote:      https://github.com/Kryptopacy/GozAI/pull/new/main        
+remote: 
+To https://github.com/Kryptopacy/GozAI.git
+ * [new branch]      main -> main

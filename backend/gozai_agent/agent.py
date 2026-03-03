@@ -18,7 +18,7 @@ firebase_mcp_toolset = McpToolset(
 # Deployed on Google Cloud Run
 root_agent = Agent(
     name="gozai_agent",
-    model="gemini-2.5-flash",
+    model="gemini-2.0-flash-exp",
     description=(
         "GozAI backend agent for routing specialized intents. "
         "Handles optometry knowledge queries, caregiver SOS alerts, "

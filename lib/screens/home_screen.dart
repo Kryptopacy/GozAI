@@ -5,11 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:flutter/foundation.dart';
+import 'package:web/web.dart' as web;
 import '../core/theme.dart';
 import '../services/gemini_live_service.dart';
 import '../services/camera_service.dart';
 import '../services/audio_service.dart';
 import '../services/haptic_service.dart';
+import '../services/ocr_service.dart';
 import '../services/screen_navigator_service.dart';
 import '../services/light_meter_service.dart';
 
@@ -33,6 +36,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   StreamSubscription? _frameSubscription;
   StreamSubscription? _audioInputSubscription;
   StreamSubscription? _audioOutputSubscription;
+  
+  // OCR grounding: run offline OCR every N frames to give Gemini text context
+  int _ocrFrameCounter = 0;
+  static const int _ocrFrameInterval = 3; // Run OCR on every 3rd frame in Read mode
 
   @override
   void initState() {
@@ -61,8 +68,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     // Initialize camera
     await cameraService.initialize();
 
+    if (!mounted) return; // Prevent using context across async gaps
+
     // Bind screen navigator to Gemini
     screenNav.bindGeminiService(geminiService);
+
+    // Wire light meter audio tone feedback.
+    // On web: plays a continuous oscillator that shifts frequency with light level.
+    // On native: the tone is described aloud by Gemini when the user asks.
+    final lightMeter = context.read<LightMeterService>();
+    lightMeter.onToneUpdate = (frequency) {
+      if (!kIsWeb) return; // Native: Gemini speech handles descriptions
+      // Use Web Audio API for a live pitch-shifting tone
+      _playLightMeterTone(frequency);
+    };
 
     // Bind Voice Command (Gemini Function Calling) intents
     geminiService.onSwitchCamera = () {
@@ -79,10 +98,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     geminiService.onDisconnect = () {
       _toggleSession(geminiService, audioService); // Safely turns off everything
     };
+    geminiService.onTriggerHaptic = (pattern) {
+      switch (pattern) {
+        case 'hazard':
+          HapticService.hazardWarning();
+          break;
+        case 'person':
+          HapticService.personDetected();
+          break;
+        case 'navigate':
+          HapticService.navigationCue();
+          break;
+      }
+    };
 
-    // Wire camera frames → Gemini
+    // Wire camera frames → Gemini (with OCR grounding in Read mode)
     _frameSubscription = cameraService.frameStream.listen((frame) {
       geminiService.sendVideoFrame(frame);
+      // In Read mode, run offline OCR every N frames and send extracted text
+      // as grounding context so Gemini is anchored to actual on-screen characters.
+      if (geminiService.currentMode == GozAIMode.reading) {
+        _ocrFrameCounter++;
+        if (_ocrFrameCounter >= _ocrFrameInterval) {
+          _ocrFrameCounter = 0;
+          _runOcrGrounding(frame, geminiService);
+        }
+      } else {
+        _ocrFrameCounter = 0; // Reset when not in reading mode
+      }
     });
 
     // Wire audio input → Gemini
@@ -454,6 +497,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
+  /// OCR Grounding for Read mode.
+  ///
+  /// Runs ML Kit offline OCR on a camera frame and sends the extracted
+  /// text to Gemini as grounding context. This gives the Live API model a
+  /// character-accurate anchor — preventing hallucination on text like
+  /// medication dosages, expiry dates, and nutrition labels.
+  Future<void> _runOcrGrounding(
+    Uint8List frame,
+    GeminiLiveService gemini,
+  ) async {
+    if (!gemini.isConnected || !mounted) return;
+    final ocrService = context.read<OcrService>();
+    try {
+      final result = await ocrService.recognizeFromBytes(frame);
+      if (result.isNotEmpty) {
+        // Send OCR text as a silent system grounding prefix
+        gemini.sendText(
+          '[OCR Context — do not read this aloud unless the user asks]: '
+          'The following text was detected on camera with offline OCR: '
+          '"${result.fullText.trim()}"',
+        );
+        debugPrint('OCR grounding sent: ${result.fullText.length} chars');
+      }
+    } catch (e) {
+      debugPrint('OCR grounding error: $e');
+    }
+  }
+
+
   // --- Helpers ---
 
   String _modeName(GozAIMode mode) {
@@ -481,4 +553,36 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         return GozAITheme.textSecondary;
     }
   }
+
+  /// Plays a brief pitched tone via Web Audio API for the light meter.
+  ///
+  /// Each 200ms tick from LightMeterService fires this, producing a
+  /// pitch-shifted tone (200–800 Hz). Lower Hz = darker, higher Hz = brighter.
+  /// Short duration (180ms) prevents tones from colliding into a continuous drone.
+  void _playLightMeterTone(double frequency) {
+    if (!kIsWeb) return;
+    try {
+      // We use package:web's AudioContext which is the standard Web Audio API
+      final ctx = web.AudioContext();
+      final oscillator = ctx.createOscillator();
+      final gain = ctx.createGain();
+
+      oscillator.type = 'sine';
+      oscillator.frequency.value = frequency.clamp(200.0, 800.0);
+
+      // Gentle envelope: fade in over 10ms, sustain, fade out over 50ms
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.01);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime + 0.13);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + 0.18);
+    } catch (e) {
+      debugPrint('LightMeter tone error: $e');
+    }
+  }
 }
+

@@ -1,7 +1,7 @@
 # GozAI — AI Accessibility Copilot for Low-Vision Patients
 
 ![Flutter](https://img.shields.io/badge/Flutter-3.41-blue?logo=flutter)
-![Gemini](https://img.shields.io/badge/Gemini_Live_API-2.0-green?logo=google)
+![Gemini](https://img.shields.io/badge/Gemini_Live_API-2.0_flash_exp-green?logo=google)
 ![ADK](https://img.shields.io/badge/Google_ADK-Agent-orange)
 ![Cloud Run](https://img.shields.io/badge/Cloud_Run-Deployed-blue?logo=googlecloud)
 ![Firebase](https://img.shields.io/badge/Firebase-Configured-yellow?logo=firebase)
