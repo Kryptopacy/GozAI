@@ -45,6 +45,16 @@ OPTOMETRY_DATA = {
         "source": "National Eye Institute (NEI)",
         "action": "See your eye doctor urgently if you notice a sudden increase in floaters.",
     },
+    "macular degeneration": {
+        "answer": "Macular degeneration affects central vision, making it hard to read or recognize faces. Navigation can be challenging due to loss of detail. Peripheral vision remains intact. Use strong task lighting and magnification.",
+        "source": "National Eye Institute (NEI)",
+        "action": "Schedule regular exams to monitor progression."
+    },
+    "diabetic retinopathy": {
+        "answer": "Diabetic retinopathy causes patchy vision loss and floaters due to blood vessel damage. Strict blood sugar control is crucial.",
+        "source": "American Academy of Ophthalmology",
+        "action": "Consult your endocrinologist and ophthalmologist regularly."
+    },
 }
 
 MEDICATION_DATA = {
@@ -66,6 +76,36 @@ MEDICATION_DATA = {
         "general_info": "Shake well before use. Do not stop suddenly — taper as directed.",
         "safety": "Long-term use can increase eye pressure. Regular monitoring required.",
     },
+    "brimonidine": {
+        "type": "Eye drops (alpha agonist)",
+        "common_use": "Glaucoma — reduces eye pressure",
+        "general_info": "Usually applied three times daily. Wait 15 minutes before inserting contact lenses.",
+        "safety": "May cause fatigue or dry mouth. Caution with certain antidepressants.",
+    },
+    "ranibizumab": {
+        "type": "Anti-VEGF injection",
+        "common_use": "Wet macular degeneration or diabetic retinopathy",
+        "general_info": "Administered via injection by an ophthalmologist. Typically requires monthly visits.",
+        "safety": "Report any sudden vision loss, severe eye pain, or signs of infection immediately.",
+    },
+}
+
+LOW_VISION_STATS = {
+    "global prevalence": {
+        "statistic": "Over 2.2 billion people globally have a near or distance vision impairment.",
+        "context": "In at least 1 billion of these cases, vision impairment could have been prevented or has yet to be addressed.",
+        "source": "World Health Organization (WHO)"
+    },
+    "assistive technology gap": {
+        "statistic": "Only 10% of people who need assistive technology have access to it.",
+        "context": "This 90% gap highlights the need for low-cost, smartphone-based solutions like GozAI.",
+        "source": "WHO and UNICEF Global Report on Assistive Technology"
+    },
+    "cognitive mapping AI": {
+        "statistic": "People with vision impairment show significantly higher task completion rates for reading and object identification tasks when using AI assistive tools.",
+        "context": "A 2025 study evaluated 25 individuals with vision loss across 14 ADL tasks using AI tools (OrCam, Envision Glasses, Seeing AI, Google Lookout). Text-based tasks showed the most consistent improvement. High user satisfaction was reported across all tools.",
+        "source": "Seiple W. et al., Translational Vision Science & Technology, 14(1):3, 2025. DOI: 10.1167/tvst.14.1.3. PMC11721483."
+    }
 }
 
 def cosine_similarity(v1, v2):
@@ -100,6 +140,7 @@ class SemanticKnowledgeBase:
         # Store dicts of {key: embedding}
         self.optometry_embeddings = {}
         self.medication_embeddings = {}
+        self.stats_embeddings = {}
         
         # Build index if client allows. In a real app we would cache these vectors.
         self._build_index()
@@ -135,6 +176,18 @@ class SemanticKnowledgeBase:
                 self.medication_embeddings[med] = np.array(response.embeddings[0].values)
             except Exception as e:
                 print(f"Error embedding medication data '{med}': {e}")
+                
+        # 3. Embed Stats Keys
+        for stat, info in LOW_VISION_STATS.items():
+            text_to_embed = f"Low Vision Statistic about {stat}: {info['statistic']} {info['context']}"
+            try:
+                response = self.client.models.embed_content(
+                    model=self.embedding_model,
+                    contents=text_to_embed
+                )
+                self.stats_embeddings[stat] = np.array(response.embeddings[0].values)
+            except Exception as e:
+                print(f"Error embedding stats data '{stat}': {e}")
 
     def semantic_search(self, query: str, domain: str, threshold: float = 0.55):
         """
@@ -161,6 +214,9 @@ class SemanticKnowledgeBase:
         elif domain == "medication":
             db = self.medication_embeddings
             source_data = MEDICATION_DATA
+        elif domain == "statistics":
+            db = self.stats_embeddings
+            source_data = LOW_VISION_STATS
         else:
             return {"found": False, "error": "Invalid domain."}
 

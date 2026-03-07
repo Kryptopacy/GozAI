@@ -144,6 +144,30 @@ class HapticService {
     }
   }
 
+  /// Gentle, warm single pulse - safe path confirmed (Reassurance)
+  static Future<void> safePathConfirm() async {
+    if (kIsWeb) {
+      _webTactileClick(frequency: 200.0, durationMs: 25);
+    } else {
+      HapticFeedback.lightImpact();
+    }
+  }
+
+  /// Distinctive pattern for environment successfully mapped
+  static Future<void> environmentKnown() async {
+    if (kIsWeb) {
+      _webTactileClick(frequency: 300.0, durationMs: 20);
+      Future.delayed(
+        const Duration(milliseconds: 150),
+        () => _webTactileClick(frequency: 400.0, durationMs: 30),
+      );
+    } else if (await Vibration.hasVibrator() == true) {
+      Vibration.vibrate(pattern: [0, 50, 100, 100]);
+    } else {
+      HapticFeedback.mediumImpact();
+    }
+  }
+
   /// Mode switch confirmation
   static Future<void> modeSwitch() async {
     if (kIsWeb) {

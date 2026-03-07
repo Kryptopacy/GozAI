@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:ui';
+
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -129,7 +131,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         case 'navigate':
           HapticService.navigationCue();
           break;
+        case 'safe':
+          HapticService.safePathConfirm();
+          break;
+        case 'environment_mapped':
+          HapticService.environmentKnown();
+          break;
+        case 'tap':
+          HapticService.tap();
+          break;
       }
+    };
+
+    // Wire AI-synthesized UI taps (for UI Navigator mode)
+    geminiService.onClickUiElement = (x, y) {
+      // Inject a pointer event at the given normalized coordinates.
+      // In UI Nav mode, the screen is the camera — Gemini can click for the user.
+      debugPrint('GozAI: AI synthesizing tap at ($x, $y)');
+    };
+
+    // Wire spatial context updates (for cognitive mapping)
+    geminiService.onSpatialUpdate = (context_) {
+      debugPrint('GozAI: Spatial context updated: $context_');
     };
     
     // Wire hardware flashlight control
@@ -216,18 +239,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       autofocus: true,
       child: Scaffold(
         backgroundColor: GozAITheme.backgroundBlack,
+        extendBodyBehindAppBar: true, 
         appBar: _buildPremiumAppBar(context),
-        body: SafeArea(
-          child: Column(
-            children: [
-              _buildStatusBar(),
-              const Spacer(flex: 1),
-              _buildCentralButton(),
-              const Spacer(flex: 2),
-              _buildModeSelector(),
-              const SizedBox(height: 24),
-            ],
-          ),
+        body: Stack(
+          children: [
+            // Immersive ambient background layer
+            _buildAmbientGlowBackground(),
+            
+            // UI Layer
+            SafeArea(
+              child: Column(
+                children: [
+                  _buildStatusBar(),
+                  const Spacer(flex: 1),
+                  _buildCentralButton(),
+                  const Spacer(flex: 2),
+                  _buildModeSelector(),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -236,6 +268,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   /// Premium Navigation Header for routing to specialized Dashboards.
   PreferredSizeWidget _buildPremiumAppBar(BuildContext context) {
     return AppBar(
+      backgroundColor: Colors.transparent, // Let background shine under
+      elevation: 0,
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -243,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           const SizedBox(width: 8),
           Text(
             'GozAI',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
           ),
         ],
       ),
@@ -269,58 +303,66 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       builder: (context, gemini, _) {
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: GozAITheme.surfaceElevated,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: GozAITheme.borderSubtle, width: 1),
-          ),
-          child: Semantics(
-            label: 'Status: ${gemini.statusMessage}. Mode: ${_modeName(gemini.currentMode)}',
-            child: Row(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _connectionColor(gemini.connectionState),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _connectionColor(gemini.connectionState).withValues(alpha: 0.4),
-                        blurRadius: 12,
-                        spreadRadius: 2,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: GozAITheme.surfacePure,
+                  border: Border.all(color: GozAITheme.borderSubtle, width: 1.5),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Semantics(
+                  label: 'Status: ${gemini.statusMessage}. Mode: ${_modeName(gemini.currentMode)}',
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _connectionColor(gemini.connectionState),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _connectionColor(gemini.connectionState).withValues(alpha: 0.6),
+                              blurRadius: 16,
+                              spreadRadius: 3,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          gemini.statusMessage,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: GozAITheme.primaryBlue.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: GozAITheme.primaryBlue.withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          _modeName(gemini.currentMode),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: GozAITheme.accentCyan,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    gemini.statusMessage,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: GozAITheme.primaryBlue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: GozAITheme.primaryBlue.withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    _modeName(gemini.currentMode),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: GozAITheme.accentCyan,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Inter',
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         );
@@ -410,16 +452,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       builder: (context, gemini, _) {
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Row(
-            children: [
-              _buildModeButton(gemini, GozAIMode.scene, Icons.wallpaper, 'Scene'),
-              const SizedBox(width: 8),
-              _buildModeButton(gemini, GozAIMode.reading, Icons.menu_book, 'Read'),
-              const SizedBox(width: 8),
-              _buildModeButton(gemini, GozAIMode.uiNav, Icons.touch_app, 'Screen'),
-              const SizedBox(width: 8),
-              _buildModeButton(gemini, GozAIMode.lightMeter, Icons.light_mode, 'Light'),
-            ],
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: GozAITheme.surfacePure.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: GozAITheme.borderSubtle, width: 1),
+                ),
+                child: Row(
+                  children: [
+                    _buildModeButton(gemini, GozAIMode.scene, Icons.wallpaper, 'Scene'),
+                    const SizedBox(width: 4),
+                    _buildModeButton(gemini, GozAIMode.reading, Icons.menu_book, 'Read'),
+                    const SizedBox(width: 4),
+                    _buildModeButton(gemini, GozAIMode.uiNav, Icons.touch_app, 'Screen'),
+                    const SizedBox(width: 4),
+                    _buildModeButton(gemini, GozAIMode.lightMeter, Icons.light_mode, 'Light'),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       },
@@ -459,15 +515,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           },
           borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
-              color: isActive ? GozAITheme.primaryBlue.withValues(alpha: 0.15) : GozAITheme.surfacePure,
-              borderRadius: BorderRadius.circular(12),
+              color: isActive ? GozAITheme.primaryBlue.withValues(alpha: 0.25) : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isActive ? GozAITheme.primaryBlue : GozAITheme.borderSubtle,
+                color: isActive ? GozAITheme.accentCyan.withValues(alpha: 0.5) : Colors.transparent,
                 width: 1,
               ),
+              boxShadow: isActive ? [
+                BoxShadow(
+                  color: GozAITheme.primaryBlue.withValues(alpha: 0.3),
+                  blurRadius: 16,
+                  spreadRadius: -2,
+                )
+              ] : null,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -475,16 +539,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 Icon(
                   icon,
                   size: 26,
-                  color: isActive ? GozAITheme.accentCyan : GozAITheme.textSecondary,
+                  color: isActive ? Colors.white : GozAITheme.textSecondary,
                 ),
                 const SizedBox(height: 6),
                 Text(
                   label,
                   style: TextStyle(
                     fontSize: 13,
-                    fontFamily: 'Inter',
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                    color: isActive ? GozAITheme.textPrimary : GozAITheme.textSecondary,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    color: isActive ? Colors.white : GozAITheme.textSecondary,
                   ),
                 ),
               ],
@@ -583,12 +646,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         telemetry.logOcrAssist(lightMeter.currentLux, result.fullText.length);
 
         // Send OCR text as a silent system grounding prefix
+        final isMed = ocrService.isMedicationLabel(result);
+        final isNutr = ocrService.isNutritionLabel(result);
+        final groundingString = result.buildGroundingString(
+          isMedication: isMed, 
+          isNutrition: isNutr,
+        );
+        
         gemini.sendText(
           '[OCR Context — do not read this aloud unless the user asks]: '
-          'The following text was detected on camera with offline OCR: '
-          '"${result.fullText.trim()}"',
+          'The following structured text was detected on camera with offline OCR. '
+          'Use the bounding boxes to infer layout like columns or tables:\\n'
+          '$groundingString',
         );
-        debugPrint('OCR grounding sent: ${result.fullText.length} chars');
+        debugPrint('OCR grounding sent: ${result.fullText.length} chars, isMed: $isMed, isNutr: $isNutr');
       }
     } catch (e) {
       debugPrint('OCR grounding error: $e');
@@ -653,6 +724,76 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     } catch (e) {
       debugPrint('LightMeter tone error: $e');
     }
+  }
+
+  /// Immersive ambient glowing orbs that react to Gemini state
+  Widget _buildAmbientGlowBackground() {
+    return Consumer2<GeminiLiveService, AudioService>(
+      builder: (context, gemini, audio, _) {
+        final isActive = gemini.isConnected && audio.isRecording;
+        final isSpeaking = gemini.isModelSpeaking;
+
+        Color mainGlow;
+        if (isSpeaking) {
+          mainGlow = GozAITheme.speakingPulse;
+        } else if (isActive) {
+          mainGlow = GozAITheme.listeningPulse;
+        } else {
+          mainGlow = GozAITheme.primaryBlue;
+        }
+
+        return Stack(
+          children: [
+            // Top Right Orb
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 1500),
+              curve: Curves.easeInOutSine,
+              top: isActive ? 20 : -100,
+              right: isActive ? -20 : -150,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 1500),
+                width: 350,
+                height: 350,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: mainGlow.withValues(alpha: 0.15),
+                  boxShadow: [
+                    BoxShadow(
+                      color: mainGlow.withValues(alpha: 0.2),
+                      blurRadius: 120,
+                      spreadRadius: 40,
+                    )
+                  ],
+                ),
+              ),
+            ),
+            // Bottom Left Orb
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 2000),
+              curve: Curves.easeInOutSine,
+              bottom: isSpeaking ? 0 : -80,
+              left: isSpeaking ? -30 : -100,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 2000),
+                width: 250,
+                height: 250,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: GozAITheme.accentCyan.withValues(alpha: isSpeaking ? 0.2 : 0.05),
+                  boxShadow: [
+                    BoxShadow(
+                      color: GozAITheme.accentCyan.withValues(alpha: isSpeaking ? 0.2 : 0.05),
+                      blurRadius: 100,
+                      spreadRadius: 30,
+                    )
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 

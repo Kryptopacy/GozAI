@@ -193,9 +193,18 @@ GozAI/
 
 GozAI's features are grounded in clinical research on Activities of Daily Living (ADLs) for low-vision patients. Every feature addresses a specific, documented challenge — not hypothetical use cases.
 
-**Research sources:** NIH, University of Washington, American Academy of Ophthalmology, American Optometric Association, National Eye Institute.
+### 📚 Clinical Research Foundation
 
----
+| Research Finding | Source | GozAI Feature |
+|---|---|---|
+| AI navigation systems measurably reduce cognitive load and improve spatial orientation for low-vision users | Seiple et al., *Transl. Vis. Sci. Technol.* 14(1):3, 2025 — [DOI: 10.1167/tvst.14.1.3](https://doi.org/10.1167/tvst.14.1.3) | Spatial Context Memory ― running mental map of landmarks |
+| High user satisfaction with AI assistive tools; significant improvement in ADL completion with AI voice/vision | Seiple et al., *PMC11721483*, NLM 2025 | Reassurance haptics + calm voice persona |
+| Significantly higher ADL task completion with AI for low-vision users — text tasks most improved | Seiple et al., *PMC11721483*, NLM 2025 | OCR grounding + structured document reading (columns, tables, forms) |
+| **90%** of people who need assistive tech cannot access it | WHO & UNICEF *Global Report on Assistive Technology*, 2022 | Runs on existing smartphones — zero specialist hardware |
+| AI vision dramatically improves column-text and label reading | Seiple et al., *PMC11721483*, NLM 2025 | Layout-aware reading mode with bounding-box document analysis |
+| Haptic feedback improves navigation confidence and reduces cognitive load for visually impaired users | MDPI *Sustainability* / JMIR Rehab. Assist. Technol., 2024 | Multi-pattern haptic feedback (hazard, person, navigate, safe) |
+
+**Additional verified sources:** WHO World Report on Vision (2019) — 2.2B people with vision impairment, 1B preventable. NIH, American Academy of Ophthalmology, American Optometric Association, National Eye Institute.
 
 ## 📜 License
 

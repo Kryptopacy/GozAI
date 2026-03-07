@@ -89,4 +89,65 @@ class ClinicalTelemetryService extends ChangeNotifier {
       debugPrint('Telemetry: Failed to log wandering: $e');
     }
   }
+
+  /// Logs cognitive map accuracy (tracked via frequency of environment re-description requests)
+  Future<void> logCognitiveMapAccuracy(bool requiredRedescription) async {
+    if (!AppConfig.isConfigured) return;
+    try {
+      await _firestore.collection('patients').doc(patientId).collection('functional_metrics').add({
+        'type': 'cognitive_mapping',
+        'timestamp': FieldValue.serverTimestamp(),
+        'requiredRedescription': requiredRedescription,
+        'note': 'Tracks user spatial awareness and reliance on AI re-orientation.',
+      });
+    } catch (e) {
+      debugPrint('Telemetry: Failed to log cognitive mapping: $e');
+    }
+  }
+
+  /// Logs emotional state proxy (session length without SOS triggers)
+  Future<void> logEmotionalStateProxy(Duration sessionLength, int sosCount) async {
+    if (!AppConfig.isConfigured) return;
+    try {
+      await _firestore.collection('patients').doc(patientId).collection('functional_metrics').add({
+        'type': 'emotional_state_proxy',
+        'timestamp': FieldValue.serverTimestamp(),
+        'durationSeconds': sessionLength.inSeconds,
+        'sosCount': sosCount,
+        'estimatedState': sosCount == 0 ? 'Confident' : 'Anxious',
+      });
+    } catch (e) {
+      debugPrint('Telemetry: Failed to log emotional state: $e');
+    }
+  }
+
+  /// Logs detection of allergen keywords on food labels
+  Future<void> logAllergenDetection(String detectedAllergens) async {
+    if (!AppConfig.isConfigured) return;
+    try {
+      await _firestore.collection('patients').doc(patientId).collection('clinical_events').add({
+        'type': 'allergen_detection',
+        'timestamp': FieldValue.serverTimestamp(),
+        'severity': 'High',
+        'detectedAllergens': detectedAllergens,
+        'note': 'Agent proactively identified critical allergens.',
+      });
+    } catch (e) {
+      debugPrint('Telemetry: Failed to log allergen detection: $e');
+    }
+  }
+
+  /// Logs successful independent navigation session
+  Future<void> logNavigationIndependence(bool successfulSession) async {
+    if (!AppConfig.isConfigured) return;
+    try {
+      await _firestore.collection('patients').doc(patientId).collection('functional_metrics').add({
+        'type': 'navigation_independence',
+        'timestamp': FieldValue.serverTimestamp(),
+        'successfulSession': successfulSession,
+      });
+    } catch (e) {
+      debugPrint('Telemetry: Failed to log navigation independence: $e');
+    }
+  }
 }

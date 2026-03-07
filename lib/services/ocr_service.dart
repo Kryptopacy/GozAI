@@ -143,6 +143,32 @@ class OcrResult {
 
   bool get isEmpty => fullText.isEmpty;
   bool get isNotEmpty => fullText.isNotEmpty;
+
+  /// Formats the OCR result into a structured grounding prompt for Gemini.
+  /// Includes bounding box coordinates for spatial layout awareness (e.g. columns).
+  String buildGroundingString({bool isMedication = false, bool isNutrition = false}) {
+    if (isEmpty) return '';
+    final buffer = StringBuffer();
+    if (isMedication) buffer.writeln('[MEDICATION LABEL]');
+    if (isNutrition) buffer.writeln('[NUTRITION LABEL]');
+
+    buffer.writeln('--- DOCUMENT LAYOUT START ---');
+    for (final block in blocks) {
+      final b = block.boundingBox;
+      final cleanText = block.text.replaceAll('\n', ' ');
+      if (b != null) {
+        final x = b.left.toInt();
+        final y = b.top.toInt();
+        final w = b.width.toInt();
+        final h = b.height.toInt();
+        buffer.writeln('(x:$x, y:$y, w:$w, h:$h): $cleanText');
+      } else {
+        buffer.writeln(cleanText);
+      }
+    }
+    buffer.writeln('--- DOCUMENT LAYOUT END ---');
+    return buffer.toString();
+  }
 }
 
 /// A block of recognized text with spatial information.

@@ -63,3 +63,12 @@ chrome/
 
 # Windows build output (not needed in repo)
 windows/
+
+# Demo & presentation docs (local team use only)
+docs/demo_script.md
+docs/pitch_notes.md
+
+# Local analysis/scratch files
+analyze_output.txt
+skills-lock.json
+

@@ -35,6 +35,10 @@ class GeminiLiveService extends ChangeNotifier {
   String _statusMessage = 'Tap to connect';
   bool _isModelSpeaking = false;
   
+  // Spatial Context Buffer (Research Implementation: Lin H. et al. 2025)
+  final List<String> _spatialContextHistory = [];
+  static const int _maxSpatialContextItems = 5;
+
   int _reconnectAttempts = 0;
   static const int _maxReconnectAttempts = 5;
 
@@ -53,7 +57,10 @@ class GeminiLiveService extends ChangeNotifier {
   void Function()? onDisconnect;
   void Function(String pattern)? onTriggerHaptic;
   void Function(bool on)? onToggleFlashlight;
+  void Function(String context)? onSpatialUpdate; // Callback for spatial memory
   void Function()? onInterrupted; // Callback for True Interruption (Barge-in)
+  void Function(double x, double y)? onClickUiElement; // AI-synthesized UI taps
+
 
   // Public getters
   GeminiConnectionState get connectionState => _connectionState;
@@ -208,14 +215,14 @@ class GeminiLiveService extends ChangeNotifier {
               },
               {
                 'name': 'triggerHaptic',
-                'description': 'Triggers a haptic vibration pattern on the device to communicate urgency non-visually. Call this proactively when you POSITIVELY detect a hazard (pattern: hazard), a person approaching (pattern: person), or as a navigation cue (pattern: navigate). Do NOT wait for the user to ask. ONLY trigger this if you can actively see the video stream. Do NOT trigger this if you cannot see or are guessing.',
+                'description': 'Triggers a haptic vibration pattern on the device to communicate urgency non-visually. Call this proactively when you POSITIVELY detect a hazard (pattern: hazard), a person approaching (pattern: person), a navigation cue (pattern: navigate), a clear path (pattern: safe), or when you map the environment (pattern: environment_mapped).',
                 'parameters': {
                   'type': 'OBJECT',
                   'properties': {
                     'pattern': {
                       'type': 'STRING',
-                      'description': 'The haptic pattern to trigger. Must be one of: hazard, person, navigate',
-                      'enum': ['hazard', 'person', 'navigate']
+                      'description': 'The haptic pattern to trigger. Must be one of: hazard, person, navigate, safe, environment_mapped',
+                      'enum': ['hazard', 'person', 'navigate', 'safe', 'environment_mapped']
                     }
                   },
                   'required': ['pattern']
@@ -251,6 +258,20 @@ class GeminiLiveService extends ChangeNotifier {
                     }
                   },
                   'required': ['on'],
+                }
+              },
+              {
+                'name': 'updateSpatialContext',
+                'description': 'Stores a key landmark or spatial description in your running mental map of the user\'s environment. Call this when the user enters a new room, passes a major landmark (e.g., stairs, checkout counter, exit), or when the environment changes significantly.',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'description': {
+                      'type': 'STRING',
+                      'description': 'A concise description of the spatial layout or landmark, relative to the user. (e.g., "Entrance is 10 feet behind you.")',
+                    }
+                  },
+                  'required': ['description'],
                 }
               }
             ]
@@ -479,10 +500,24 @@ class GeminiLiveService extends ChangeNotifier {
             final pattern = args['pattern'] as String? ?? 'navigate';
             onTriggerHaptic?.call(pattern);
             break;
+          case 'updateSpatialContext':
+            final desc = args['description'] as String?;
+            if (desc != null && desc.isNotEmpty) {
+               _spatialContextHistory.add(desc);
+               if (_spatialContextHistory.length > _maxSpatialContextItems) {
+                 _spatialContextHistory.removeAt(0);
+               }
+               onSpatialUpdate?.call(desc);
+               debugPrint('GeminiLive: Spatial Context Updated -> \$desc');
+            }
+            break;
           case 'clickUiElement':
             final x = (args['x'] as num?)?.toDouble() ?? 0.0;
             final y = (args['y'] as num?)?.toDouble() ?? 0.0;
-            _synthesizeTap(x, y);
+            // Route UI tap through the registered callback (wired up in home_screen)
+            // and provide haptic feedback so the user knows a tap was synthesized.
+            onClickUiElement?.call(x, y);
+            onTriggerHaptic?.call('tap');
             break;
           case 'toggleFlashlight':
             final on = args['on'] as bool? ?? false;

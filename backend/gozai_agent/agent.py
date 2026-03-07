@@ -3,7 +3,7 @@ from google.adk import Agent
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 from mcp import StdioServerParameters
 
-from .tools import search_optometry_guidelines, send_sos_alert, get_medication_info
+from .tools import search_optometry_guidelines, send_sos_alert, get_medication_info, get_low_vision_statistics
 
 # Initialize Firebase MCP Toolset
 firebase_mcp_toolset = McpToolset(
@@ -34,6 +34,8 @@ root_agent = Agent(
        send_sos_alert tool to notify their caregiver.
     3. When a user asks about medication, use get_medication_info to 
        provide safe, verified information.
+    4. When a user or caregiver asks about the prevalence of low vision, 
+       assistive technology gaps, or research impact, use get_low_vision_statistics.
     
     IMPORTANT:
     - Never diagnose conditions or prescribe treatment
@@ -44,6 +46,7 @@ root_agent = Agent(
         search_optometry_guidelines,
         send_sos_alert,
         get_medication_info,
+        get_low_vision_statistics,
         firebase_mcp_toolset,
     ],
 )
