@@ -105,6 +105,46 @@ LOW_VISION_STATS = {
         "statistic": "People with vision impairment show significantly higher task completion rates for reading and object identification tasks when using AI assistive tools.",
         "context": "A 2025 study evaluated 25 individuals with vision loss across 14 ADL tasks using AI tools (OrCam, Envision Glasses, Seeing AI, Google Lookout). Text-based tasks showed the most consistent improvement. High user satisfaction was reported across all tools.",
         "source": "Seiple W. et al., Translational Vision Science & Technology, 14(1):3, 2025. DOI: 10.1167/tvst.14.1.3. PMC11721483."
+    },
+    "cognitive load fatigue": {
+        "statistic": "High cognitive load from navigation and reading causes significant exhaustion for individuals with AMD and low vision.",
+        "context": "Rehabilitation protocols focus on reducing reading effort and cognitive load to prevent cognitive decline and improve daily functioning.",
+        "source": "Wittich W. et al., JMIR Res Protoc, 2021. DOI: 10.2196/19931."
+    },
+    "synchronized vibro-acoustic feedback": {
+        "statistic": "Combining vibrational feedback with escalating sound reduces collisions more effectively than either mode alone.",
+        "context": "A 2024 study tested a 10-motor belt integrated with auditory beeps, finding that synced multisensory cues improved navigation safety for the blind.",
+        "source": "Ricci F.S. et al., JMIR Rehabilitation and Assistive Technology, Dec 2024. DOI: 10.2196/55776."
+    },
+    "intuitive directional haptics": {
+        "statistic": "Shape-changing and state-based haptic interfaces are significantly faster and more preferred than continuous vibration.",
+        "context": "Researchers developed 'Shape', showing that visually impaired users navigate as effectively as sighted people when haptics are intuitive rather than fatiguing 'buzzes'.",
+        "source": "Spiers A.J. et al., Nature Scientific Reports, Dec 2024. DOI: 10.1038/s41598-024-79845-7."
+    },
+    "assistive tech adoption": {
+        "statistic": "AT abandonment is a persistent challenge; participatory design and integrated technology ecosystems are critical for sustained adoption.",
+        "context": "A 2026 perspective paper argues that AI-powered ATs must be co-designed with users to avoid abandonment, emphasizing transdisciplinary research and social engagement.",
+        "source": "Ventura R.B., Hamilton-Fletcher G., Rizzo J-R., Frontiers in Digital Health, Jan 2026. DOI: 10.3389/fdgth.2025.1719746."
+    },
+    "LLM multimodal navigation": {
+        "statistic": "A single LLM-powered navigation app can replace multiple separate tools, reducing cognitive overhead for visually impaired travelers.",
+        "context": "NaviGPT integrates LiDAR obstacle detection, vibration feedback, and GPT-4 contextual guidance in one system, addressing the app-switching fatigue common among PVI.",
+        "source": "NaviGPT, ACM GROUP Companion, Jan 2025. DOI: 10.1145/3688828.3699636."
+    },
+    "systematic review 2025": {
+        "statistic": "A systematic review of 80 studies confirms deep learning and multimodal integration (vision, hearing, touch) are the frontier of assistive tech for visual impairment.",
+        "context": "The review classifies technologies into visual imagery, non-visual data, map-based, 3D sound, and smartphone apps, highlighting wearables and AI navigation as most impactful.",
+        "source": "Samavati F.C. & Abadi A.R.G., Cureus J. Computer Science, Oct 2025. DOI: 10.7759/s44389-025-06891-1."
+    },
+    "mental health glaucoma mortality": {
+        "statistic": "Glaucoma combined with vision impairment significantly increases all-cause mortality and results in a 2.486x higher hazard ratio for suicide compared to healthy controls.",
+        "context": "Vision loss carries a heavy psychological and systemic health toll. This underscores the necessity for AI assistants to use a calm, reassuring persona to mitigate anxiety and depression.",
+        "source": "Nature Scientific Reports, 2025. DOI: 10.1038/s41598-025-24123-3."
+    },
+    "amd low luminance contrast": {
+        "statistic": "Intermediate Age-related Macular Degeneration (AMD) significantly impairs vision under low-luminance conditions, profoundly impacting quality of life with contrast vision being most critically affected.",
+        "context": "Patient quality of life drops sharply in dim environments. This justifies the use of AI computer vision to act as 'night vision' or an active describer in low-light and low-contrast settings.",
+        "source": "Nature Scientific Reports, 2025. DOI: 10.1038/s41598-025-21210-3 & DOI: 10.1038/s41598-025-14553-4."
     }
 }
 

@@ -82,6 +82,11 @@ class HapticService {
 
   /// Rapid triple buzz — HAZARD / STOP
   static Future<void> hazardWarning() async {
+    // NYU Synchronized Vibro-Acoustic Feedback:
+    // Fire a system alert sound AT THE EXACT SAME TIME as the haptic impact.
+    // This semantic pairing requires less cognitive load than unsynced separate warnings.
+    await SystemSound.play(SystemSoundType.alert);
+
     if (kIsWeb) {
       // Three rapid clicks with slight pitch drop
       _webTactileClick(frequency: 180.0, durationMs: 40);

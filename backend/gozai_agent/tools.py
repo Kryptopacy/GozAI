@@ -227,7 +227,8 @@ def get_low_vision_statistics(query: str) -> dict:
 
     Use this when asked about the global prevalence of vision impairment,
     gaps in assistive technology access, or AI's proven impact on outcomes.
-    All statistics are drawn from peer-reviewed sources (WHO, NPJ Digital Medicine).
+    All statistics are drawn from peer-reviewed sources (WHO, Seiple et al. TVST 2025,
+    WHO & UNICEF Global Report on Assistive Technology 2022).
 
     Args:
         query: The specific topic or question about low vision statistics.

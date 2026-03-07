@@ -202,9 +202,16 @@ GozAI's features are grounded in clinical research on Activities of Daily Living
 | Significantly higher ADL task completion with AI for low-vision users — text tasks most improved | Seiple et al., *PMC11721483*, NLM 2025 | OCR grounding + structured document reading (columns, tables, forms) |
 | **90%** of people who need assistive tech cannot access it | WHO & UNICEF *Global Report on Assistive Technology*, 2022 | Runs on existing smartphones — zero specialist hardware |
 | AI vision dramatically improves column-text and label reading | Seiple et al., *PMC11721483*, NLM 2025 | Layout-aware reading mode with bounding-box document analysis |
-| Haptic feedback improves navigation confidence and reduces cognitive load for visually impaired users | MDPI *Sustainability* / JMIR Rehab. Assist. Technol., 2024 | Multi-pattern haptic feedback (hazard, person, navigate, safe) |
+| Directional haptic feedback is more intuitive and less fatiguing than heavy vibration arrays | Spiers et al., *Nature Scientific Reports*, 2024 — [DOI: 10.1038/s41598-024-79845-7](https://doi.org/10.1038/s41598-024-79845-7) | Semantic Haptic Priority — triggers only on state change |
+| Synchronized vibro-acoustic feedback significantly reduces collisions in complex environments | Ricci F.S. et al., *JMIR Rehab. Assist. Technol.*, 2024 — [DOI: 10.2196/55776](https://doi.org/10.2196/55776) | Synchronized hazard audio + heavy impact haptic |
+| High cognitive load from reading/navigation exhausts patients with age-related macular degeneration | Wittich W. et al., *JMIR Res Protoc*, 2021 — [DOI: 10.2196/19931](https://doi.org/10.2196/19931) | Battery-optimized, concise Gemini verbalizations & haptics |
+| AT abandonment is common; participatory design and integrated ecosystems are critical for sustained adoption | Ventura R.B. et al., *Frontiers in Digital Health*, Jan 2026 — [DOI: 10.3389/fdgth.2025.1719746](https://doi.org/10.3389/fdgth.2025.1719746) | User-centered design; runs on user's own phone, no extra hardware |
+| LLM + LiDAR multimodal navigation reduces app-switching and improves real-time travel for PVI | NaviGPT, *ACM GROUP Companion*, Jan 2025 — [DOI: 10.1145/3688828.3699636](https://doi.org/10.1145/3688828.3699636) | Single AI copilot handling vision, navigation, and reading |
+| Systematic review of 80 studies: deep learning + multimodal integration are the frontier of VI assistive tech | Samavati & Abadi, *Cureus J. Computer Science*, Oct 2025 — [DOI: 10.7759/s44389-025-06891-1](https://doi.org/10.7759/s44389-025-06891-1) | AI-powered smartphone app with haptic, audio, and voice feedback |
+| Glaucoma with vision impairment significantly increases mortality and carries a 2.486x higher suicide risk | *Nature Scientific Reports*, 2025 — [DOI: 10.1038/s41598-025-24123-3](https://doi.org/10.1038/s41598-025-24123-3) | Empathetic AI persona to reduce anxiety and psychological toll |
+| AMD sharply drops quality of life in low-luminance/low-contrast environments | *Nature Scientific Reports*, 2025 — [DOIs: 10.1038/s41598-025-21210-3](https://doi.org/10.1038/s41598-025-21210-3) & [-14553-4](https://doi.org/10.1038/s41598-025-14553-4) | AI scene description acts as "night/contrast vision" assist |
 
-**Additional verified sources:** WHO World Report on Vision (2019) — 2.2B people with vision impairment, 1B preventable. NIH, American Academy of Ophthalmology, American Optometric Association, National Eye Institute.
+**Additional verified sources:** WHO World Report on Vision (2019) — 2.2B people with vision impairment. NIH, American Academy of Ophthalmology, American Optometric Association, National Eye Institute.
 
 ## 📜 License
 

@@ -35,7 +35,10 @@ class GeminiLiveService extends ChangeNotifier {
   String _statusMessage = 'Tap to connect';
   bool _isModelSpeaking = false;
   
-  // Spatial Context Buffer (Research Implementation: Lin H. et al. 2025)
+  // Spatial Context Buffer — grounding Gemini with a running mental map.
+  // Research basis: Seiple W. et al., TVST 14(1):3, 2025 (PMC11721483) —
+  // AI assistive tools significantly improve spatial orientation and ADL
+  // completion for people with vision loss.
   final List<String> _spatialContextHistory = [];
   static const int _maxSpatialContextItems = 5;
 
