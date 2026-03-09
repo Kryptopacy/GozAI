@@ -1,35 +1,18 @@
-Analyzing lib...
+Analyzing GozAI...                                              
 
-  error - screens\caregiver_dashboard.dart:5:8 - Target of URI doesn't exist: 'package:intl/intl.dart'. Try creating the file referenced by the URI, or try using a URI for a file that does exist. - uri_does_not_exist
-  error - screens\caregiver_dashboard.dart:63:6 - Expected to find ')'. - expected_token
-  error - screens\caregiver_dashboard.dart:169:52 - The method 'DateFormat' isn't defined for the type 'CaregiverDashboard'. Try correcting the name to the name of an existing method, or defining a method named 'DateFormat'. - undefined_method
-  error - screens\caregiver_dashboard.dart:225:4 - Expected to find ')'. - expected_token
-  error - screens\doctor_dashboard.dart:5:8 - Target of URI doesn't exist: 'package:intl/intl.dart'. Try creating the file referenced by the URI, or try using a URI for a file that does exist. - uri_does_not_exist
-  error - screens\doctor_dashboard.dart:108:6 - Expected to find ')'. - expected_token
-  error - screens\doctor_dashboard.dart:171:21 - The method 'DateFormat' isn't defined for the type 'DoctorDashboard'. Try correcting the name to the name of an existing method, or defining a method named 'DateFormat'. - undefined_method
-  error - screens\doctor_dashboard.dart:179:16 - Expected to find ';'. - expected_token
-  error - screens\doctor_dashboard.dart:180:13 - Expected an identifier. - missing_identifier
-  error - screens\doctor_dashboard.dart:180:13 - Unexpected text ';'. Try removing the text. - unexpected_token
-  error - screens\doctor_dashboard.dart:185:4 - Expected to find ')'. - expected_token
-  error - screens\doctor_dashboard.dart:222:1 - Expected a method, getter, setter or operator declaration. This appears to be incomplete code. Try removing it or completing it. - expected_executable
-  error - screens\doctor_dashboard.dart:290:9 - Expected to find ']'. - expected_token
-  error - screens\doctor_dashboard.dart:292:6 - Expected to find ')'. - expected_token
-  error - services\camera_service.dart:22:8 - The name '_isCapturing' is already defined. Try renaming one of the declarations. - duplicate_definition
-           - The first definition of this name at services\camera_service.dart:21:8.
-  error - services\gemini_live_service.dart:515:13 - The method '_synthesizeTap' isn't defined for the type 'GeminiLiveService'. Try correcting the name to the name of an existing method, or defining a method named '_synthesizeTap'. - undefined_method
-  error - services\ocr_service.dart:159:143 - Expected to find ')'. - expected_token
-warning - screens\doctor_dashboard.dart:180:13 - Dead code. Try removing the code, or fixing the code before it so that it can be reached. - dead_code
-warning - services\audio_service.dart:36:16 - The value of the field '_pingPlayer' isn't used. Try removing the field, or using it. - unused_field
-warning - services\audio_service.dart:287:31 - 'StreamAudioSource' is experimental and could be removed or changed at any time. - experimental_member_use
-warning - services\audio_service.dart:292:10 - 'StreamAudioResponse' is experimental and could be removed or changed at any time. - experimental_member_use
-warning - services\audio_service.dart:295:12 - 'StreamAudioResponse' is experimental and could be removed or changed at any time. - experimental_member_use
-warning - services\camera_service.dart:21:8 - The value of the field '_isCapturing' isn't used. Try removing the field, or using it. - unused_field
-warning - services\camera_service.dart:28:10 - The value of the field '_lastAccelMagnitude' isn't used. Try removing the field, or using it. - unused_field
-warning - services\gemini_live_service.dart:5:8 - Unused import: 'package:flutter/gestures.dart'. Try removing the import directive. - unused_import
-   info - screens\caregiver_dashboard.dart:5:8 - The imported package 'intl' isn't a dependency of the importing package. Try adding a dependency for 'intl' in the 'pubspec.yaml' file. - depend_on_referenced_packages
-   info - screens\caregiver_dashboard.dart:164:41 - Unnecessary use of multiple underscores. Try using '_'. - unnecessary_underscores
-   info - screens\doctor_dashboard.dart:5:8 - The imported package 'intl' isn't a dependency of the importing package. Try adding a dependency for 'intl' in the 'pubspec.yaml' file. - depend_on_referenced_packages
-   info - screens\doctor_dashboard.dart:180:14 - Unnecessary empty statement. Try removing the empty statement or restructuring the code. - empty_statements
-   info - services\camera_service.dart:21:8 - The private field _isCapturing could be 'final'. Try making the field 'final'. - prefer_final_fields
+   info - Dangling library doc comment - lib\core\system_prompt.dart:1:1 - dangling_library_doc_comments
+   info - Unnecessary use of multiple underscores - lib\screens\caregiver_dashboard.dart:212:45 - unnecessary_underscores
+  error - Undefined name 'GestureBinding' - lib\screens\home_screen.dart:162:7 - undefined_identifier
+  error - Undefined name 'GestureBinding' - lib\screens\home_screen.dart:172:9 - undefined_identifier
+warning - The value of the field '_pingPlayer' isn't used - lib\services\audio_service.dart:36:16 - unused_field
+warning - 'StreamAudioSource' is experimental and could be removed or changed at any time - lib\services\audio_service.dart:287:31 - experimental_member_use
+warning - 'StreamAudioResponse' is experimental and could be removed or changed at any time - lib\services\audio_service.dart:292:10 - experimental_member_use
+warning - 'StreamAudioResponse' is experimental and could be removed or changed at any time - lib\services\audio_service.dart:295:12 - experimental_member_use
+warning - The value of the field '_lastAccelMagnitude' isn't used - lib\services\camera_service.dart:27:10 - unused_field
+warning - Unused import: 'package:flutter/gestures.dart' - lib\services\gemini_live_service.dart:5:8 - unused_import
+   info - The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart' - lib\services\screen_capture_web.dart:7:8 - unnecessary_import
+warning - Unused import: 'dart:ui' - lib\services\screen_capture_web.dart:8:8 - unused_import
+warning - Unnecessary cast - lib\services\screen_capture_web.dart:64:23 - unnecessary_cast
+  error - The getter 'onEnded' isn't defined for the type 'MediaStreamTrack' - lib\services\screen_capture_web.dart:65:15 - undefined_getter
+warning - The value of the local variable 'base64String' isn't used - lib\services\screen_capture_web.dart:104:13 - unused_local_variable
 
-30 issues found.

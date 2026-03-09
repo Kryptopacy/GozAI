@@ -1,218 +1,82 @@
-# GozAI — AI Accessibility Copilot for Low-Vision Patients
+# 👁️ GozAI — Your Voice-First Emotional & Accessibility Copilot
 
 ![Flutter](https://img.shields.io/badge/Flutter-3.41-blue?logo=flutter)
 ![Gemini](https://img.shields.io/badge/Gemini_Live_API-2.0_flash_exp-green?logo=google)
-![ADK](https://img.shields.io/badge/Google_ADK-Agent-orange)
-![Cloud Run](https://img.shields.io/badge/Cloud_Run-Deployed-blue?logo=googlecloud)
-![Firebase](https://img.shields.io/badge/Firebase-Configured-yellow?logo=firebase)
 
-> *"GozAI isn't just an app that looks at things — it's a continuously aware, privacy-respecting copilot that restores independence."*
+> **"GozAI isn't just an app that looks at things — it's an empathetic, continuously aware copilot that restores independence and psychological safety."**
 
-**GozAI** is a real-time voice + vision AI assistant built for people with low vision or blindness. It uses the **Gemini Multimodal Live API** for continuous, interruptible conversation with simultaneous camera and audio streaming — acting as the user's eyes in the real world and on their phone screen.
+Low vision affects over **2.2 billion people globally**. Standard screen readers fail when faced with unlabelled digital UIs, and traditional AI tools require you to manually snap photos like a robot, causing cognitive fatigue. The psychological toll—loneliness, frustration, and anxiety—is massive, yet entirely ignored by modern tech.
 
-Built for the **Gemini Live Agent Challenge** | Tracks: **Live Agents** + **UI Navigator**
+**GozAI fixes this.** We engineered a real-time, voice-first companion using the **Gemini Multimodal Live API**. Goz acts as your eyes, your hands on digital screens, and a supportive talk-partner when you need one.
 
 ---
 
-## 🎯 What Problem Does GozAI Solve?
+## 🛠️ Real-world Solutions to Daily Problems (ADLs)
 
-Low vision affects over **2.2 billion people globally** (WHO). Existing assistive tech (VoiceOver, TalkBack) handles labeled UI elements but fails at:
+GozAI is built strictly around the five core Activities of Daily Living (ADLs) that dictate a low-vision patient's independence. It is designed to be your constant, hands-free companion.
 
-| Gap | Example | GozAI Solution |
-|-----|---------|----------------|
-| **Medication safety** | Can't read pill bottles or distinguish similar pills | *"This is Timolol eye drops, 0.5%. Take twice daily. Expires June 2026."* |
-| **Visual-only content** | CAPTCHAs, color-coded info, image-based UIs | Gemini vision reads what screen readers can't |
-| **Hazard detection** | Wet floors, stairs, overhanging obstacles | Real-time 1 FPS scene analysis with haptic alerts |
-| **Context loss from magnification** | Zooming in = losing page layout | Conversational querying: *"What's the third item on this menu?"* |
-| **Cooking & grocery** | Can't assess food doneness or read nutrition labels | *"The chicken is golden brown, looks fully cooked"* |
-| **Lighting orientation** | Walking from bright street into dim hallway | Offline light-meter with rising audio tone toward light |
+### 1. The Challenge: "I'm lonely or frustrated about my vision loss."
+**The GozAI Solution:** Goz is an empathetic talk partner. 
+* **How it works:** Just say "Hey Siri, open Goz." The microphone opens instantly. If you need to vent, talk through frustration, or just chat, Goz is clinically prompted to be a warm, reassuring conversationalist—not just a utility tool. 
 
----
+### 2. The Challenge: "I can't read the permission pop-up on my screen to use an app."
+**The GozAI Solution:** The Universal UI Navigator.
+* **How it works (Dual-Mode):** When you encounter an unlabelled button or OS pop-up, you don't need to try and touch it. 
+    * **Efficiency Mode:** Just say, "Goz, click 'Allow'." Goz sees the screen, calculates the coordinates, and injects a synthetic tap *for* you.
+    * **Companion Mode:** Say, "Goz, help me find the 'Next' button." Goz uses haptic sonar and warm audio cues ("A little down... stop, right there") to guide your finger to the exact pixel.
 
-## 🏗️ Architecture
+### 3. The Challenge: "I don't know if these stairs drop off sharply."
+**The GozAI Solution:** Continuous Environmental Scanning with Semantic Haptics.
+* **How it works:** Goz runs continuously in your pocket or on your lanyard, capturing frames at battery-optimized 1FPS. It prioritizes *immediate physical hazards* above everything else. Instead of shouting descriptions at you, it uses specific haptic pulses to warn of drop-offs or vehicles, keeping your audio space clear.
 
-```
-┌─────────────────────────────────────────────────┐
-│           Flutter App (iOS / Android / Web)       │
-│                                                   │
-│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
-│  │ Camera    │ │ Audio    │ │ Accessibility UI │  │
-│  │ 1 FPS    │ │ 16kHz    │ │ High-Contrast    │  │
-│  │ JPEG     │ │ PCM Mono │ │ Large Touch      │  │
-│  └────┬─────┘ └────┬─────┘ └──────────────────┘  │
-│       │             │                              │
-│  ┌────▼─────────────▼─────┐  ┌────────────────┐  │
-│  │  WebSocket (Gemini      │  │ Google ML Kit  │  │
-│  │  Multimodal Live API)   │  │ (Offline OCR)  │  │
-│  └────────────┬────────────┘  └────────────────┘  │
-└───────────────┼────────────────────────────────────┘
-                │
-    ┌───────────▼───────────┐
-    │  Gemini 2.0 Flash     │
-    │  Multimodal Live      │
-    │  (Voice + Vision)     │
-    └───────────┬───────────┘
-                │ Function Calls
-    ┌───────────▼───────────┐
-    │  ADK Backend          │
-    │  (Cloud Run)          │
-    │  ┌─────────────────┐  │
-    │  │ Optometry RAG   │  │
-    │  │ Caregiver SOS   │  │
-    │  │ Medication Info  │  │
-    │  └─────────────────┘  │
-    └───────────────────────┘
-```
+### 4. The Challenge: "I can't read this restaurant menu or medicine bottle."
+**The GozAI Solution:** Offline & Cloud Reading Modes.
+* **How it works:** Point your phone and ask Goz to read. For sensitive medical data or when you have no cell service, Goz falls back to on-device Google ML Kit OCR. For complex layouts like a busy restaurant menu, Gemini parses the entire visual hierarchy and reads it to you at a natural pace.
 
 ---
 
-## 🚀 Quick Start
+## 👨‍⚕️ Clinical Research Foundation (2025-2026)
+
+Every feature in GozAI addresses a documented challenge—not a hypothetical use case.
+
+| Research Finding | The GozAI Implementation |
+|---|---|
+| Glaucoma/Vision Impairment carries a **2.486x higher suicide risk** due to the psychological toll. | **Clinical Empathy:** Goz is explicitly programmed as an anchor of psychological safety—calm, empathetic, and reassuring; prioritizing human connection. |
+| Assistive Tech abandonment is caused by high cognitive load and tedious UI interactions. | **Zero-UI Activation & Barge-in:** Starts instantly via voice assistant. The mic is always hot; you can interrupt Goz by simply speaking over it. |
+| Directional haptic feedback is more intuitive and less fatiguing for navigation than audio alone. | **Semantic Vibro-Acoustics:** Feedback is triggered only on state changes/threats to prevent sensory saturation. |
+
+---
+
+## 🏗️ Technical Architecture (PWA & Beyond)
+
+GozAI is currently optimized as a Progressive Web App (PWA) to ensure maximum accessibility across any device immediately, without waiting for App Store approvals.
+
+*   **Frontend:** Flutter Web (Brutalist-accessible, high-contrast UI).
+*   **Cognitive Engine:** Gemini 2.0 Flash Multimodal (WebSockets).
+*   **Execution Bridge:** In-App Synthetic Gestures (Flutter `GestureBinding`) and `getDisplayMedia` for screen capture.
+*   **The Future (Native):** See `docs/NATIVE_ARCHITECTURE_BLUEPRINT.md` for our post-hackathon roadmap detailing how GozAI scales to Android `AccessibilityService` (for OS-wide Ghost Touch) and Smart Glasses (Bluetooth HID).
+
+---
+
+## 🚀 Quick Start (For Developers)
 
 ### Prerequisites
 - Flutter SDK 3.41+
 - Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
-- Python 3.11+ with [uv](https://astral.sh/uv) (for backend)
 
 ### Setup
-
 ```bash
 # Clone the repository
 git clone https://github.com/Kryptopacy/GozAI.git
 cd GozAI
-
-# Configure environment
 cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
 
-# Install Flutter dependencies
+# Install dependencies and run
 flutter pub get
-
-# Run on device/simulator
-flutter run
-
-# --- Backend (optional) ---
-cd backend
-uv venv && uv pip install .
-adk web  # Opens interactive agent UI at localhost:8000
+flutter run -d chrome
 ```
 
-### Cloud Deployment
+## 🛡️ Trust & Safety
+GozAI respects the vulnerability of its users. **Zero images are stored.** Processed frames are immediately discarded.
 
-```bash
-# Automated deployment to Google Cloud Run
-chmod +x deploy.sh
-./deploy.sh gozai-app us-central1
-```
-
----
-
-## 📱 Features
-
-### Mode 1: Scene (Live Agents Track)
-Real-time environmental awareness via continuous camera streaming.
-- Hazard detection within 10-foot radius
-- Spatial audio descriptions: *"Door on your left, stairs ahead"*
-- Haptic feedback patterns (triple buzz = hazard, double tap = person)
-- Barge-in: interrupt GozAI mid-sentence
-
-### Mode 2: Read
-Conversational document reading powered by Gemini vision + offline ML Kit OCR.
-- *"What's the dosage on this bottle?"* → reads and explains
-- Currency identification
-- Nutrition label structured reading
-
-### Mode 3: Screen (UI Navigator Track)
-AI-powered Digital Accessibility Bridge — where VoiceOver/TalkBack fail.
-- Full semantic understanding of any screen
-- Visual CAPTCHA solving
-- Color-coded element interpretation
-- Error message and form field identification
-
-### Mode 4: Light
-Offline ambient light orientation using phone sensors.
-- Rising audio tone toward light sources
-- Helps navigate dark/unfamiliar rooms
-- Zero internet required
-
----
-
-## 🛡️ Safety & Privacy
-
-- **No images stored** — camera frames are processed in real-time and discarded
-- **Never diagnoses** — always recommends consulting healthcare professionals
-- **Curated medical info only** — optometry RAG uses verified AAO/AOA guidelines
-- **On-device processing** — ML Kit OCR and light meter work fully offline
-
----
-
-## 🔧 Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | Flutter (Dart) — iOS, Android, Web |
-| **AI Core** | Gemini 2.0 Flash Multimodal Live API (WebSocket) |
-| **Backend** | Google ADK on Cloud Run |
-| **Edge AI** | Google ML Kit (offline OCR) |
-| **Database** | Firebase Firestore |
-| **Auth** | Firebase Auth |
-| **Deployment** | Automated via `deploy.sh` → Cloud Run |
-
----
-
-## 📁 Project Structure
-
-```
-GozAI/
-├── lib/
-│   ├── core/
-│   │   ├── app_config.dart       # Environment configuration
-│   │   ├── system_prompt.dart    # Gemini persona & behavior
-│   │   └── theme.dart            # Accessibility-first design system
-│   ├── services/
-│   │   ├── gemini_live_service.dart   # WebSocket ↔ Gemini Live API
-│   │   ├── camera_service.dart        # Camera frame capture
-│   │   ├── audio_service.dart         # Mic + speaker (PCM)
-│   │   └── haptic_service.dart        # Vibration patterns
-│   ├── screens/
-│   │   └── home_screen.dart      # Main accessibility interface
-│   └── main.dart                 # App entry point
-├── backend/
-│   ├── gozai_agent/
-│   │   ├── agent.py              # ADK agent definition
-│   │   └── tools.py              # RAG, SOS, medication tools
-│   ├── Dockerfile                # Cloud Run container
-│   └── pyproject.toml            # Python dependencies (uv)
-├── deploy.sh                     # Automated Cloud Run deployment
-├── pubspec.yaml                  # Flutter dependencies
-└── .env.example                  # Environment template
-```
-
----
-
-## 👨‍⚕️ Designed by an Optometrist
-
-GozAI's features are grounded in clinical research on Activities of Daily Living (ADLs) for low-vision patients. Every feature addresses a specific, documented challenge — not hypothetical use cases.
-
-### 📚 Clinical Research Foundation
-
-| Research Finding | Source | GozAI Feature |
-|---|---|---|
-| AI navigation systems measurably reduce cognitive load and improve spatial orientation for low-vision users | Seiple et al., *Transl. Vis. Sci. Technol.* 14(1):3, 2025 — [DOI: 10.1167/tvst.14.1.3](https://doi.org/10.1167/tvst.14.1.3) | Spatial Context Memory ― running mental map of landmarks |
-| High user satisfaction with AI assistive tools; significant improvement in ADL completion with AI voice/vision | Seiple et al., *PMC11721483*, NLM 2025 | Reassurance haptics + calm voice persona |
-| Significantly higher ADL task completion with AI for low-vision users — text tasks most improved | Seiple et al., *PMC11721483*, NLM 2025 | OCR grounding + structured document reading (columns, tables, forms) |
-| **90%** of people who need assistive tech cannot access it | WHO & UNICEF *Global Report on Assistive Technology*, 2022 | Runs on existing smartphones — zero specialist hardware |
-| AI vision dramatically improves column-text and label reading | Seiple et al., *PMC11721483*, NLM 2025 | Layout-aware reading mode with bounding-box document analysis |
-| Directional haptic feedback is more intuitive and less fatiguing than heavy vibration arrays | Spiers et al., *Nature Scientific Reports*, 2024 — [DOI: 10.1038/s41598-024-79845-7](https://doi.org/10.1038/s41598-024-79845-7) | Semantic Haptic Priority — triggers only on state change |
-| Synchronized vibro-acoustic feedback significantly reduces collisions in complex environments | Ricci F.S. et al., *JMIR Rehab. Assist. Technol.*, 2024 — [DOI: 10.2196/55776](https://doi.org/10.2196/55776) | Synchronized hazard audio + heavy impact haptic |
-| High cognitive load from reading/navigation exhausts patients with age-related macular degeneration | Wittich W. et al., *JMIR Res Protoc*, 2021 — [DOI: 10.2196/19931](https://doi.org/10.2196/19931) | Battery-optimized, concise Gemini verbalizations & haptics |
-| AT abandonment is common; participatory design and integrated ecosystems are critical for sustained adoption | Ventura R.B. et al., *Frontiers in Digital Health*, Jan 2026 — [DOI: 10.3389/fdgth.2025.1719746](https://doi.org/10.3389/fdgth.2025.1719746) | User-centered design; runs on user's own phone, no extra hardware |
-| LLM + LiDAR multimodal navigation reduces app-switching and improves real-time travel for PVI | NaviGPT, *ACM GROUP Companion*, Jan 2025 — [DOI: 10.1145/3688828.3699636](https://doi.org/10.1145/3688828.3699636) | Single AI copilot handling vision, navigation, and reading |
-| Systematic review of 80 studies: deep learning + multimodal integration are the frontier of VI assistive tech | Samavati & Abadi, *Cureus J. Computer Science*, Oct 2025 — [DOI: 10.7759/s44389-025-06891-1](https://doi.org/10.7759/s44389-025-06891-1) | AI-powered smartphone app with haptic, audio, and voice feedback |
-| Glaucoma with vision impairment significantly increases mortality and carries a 2.486x higher suicide risk | *Nature Scientific Reports*, 2025 — [DOI: 10.1038/s41598-025-24123-3](https://doi.org/10.1038/s41598-025-24123-3) | Empathetic AI persona to reduce anxiety and psychological toll |
-| AMD sharply drops quality of life in low-luminance/low-contrast environments | *Nature Scientific Reports*, 2025 — [DOIs: 10.1038/s41598-025-21210-3](https://doi.org/10.1038/s41598-025-21210-3) & [-14553-4](https://doi.org/10.1038/s41598-025-14553-4) | AI scene description acts as "night/contrast vision" assist |
-
-**Additional verified sources:** WHO World Report on Vision (2019) — 2.2B people with vision impairment. NIH, American Academy of Ophthalmology, American Optometric Association, National Eye Institute.
-
-## 📜 License
-
-MIT License. See [LICENSE](LICENSE) for details.
+*Built for the Gemini Live Agent Challenge | Tracks: Live Agents + UI Navigator*

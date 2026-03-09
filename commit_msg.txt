@@ -1,0 +1,15 @@
+feat(ui-navigator): implement dual-mode web navigator & voice-first persona
+
+- **Voice-First Empathy Copilot**:
+  - Overhauled `system_prompt.dart` to instill the "Goz" persona with clinical empathy and psychological safety constraints.
+  - Implemented Zero-UI Start in `home_screen.dart` so the AI session and mic start instantly on launch to support OS-level voice activation (e.g. "Hey Siri, open Goz").
+  - Seamless barge-in fully supported by existing audio streaming.
+  
+- **Universal UI Navigator (PWA)**:
+  - Added `getDisplayMedia` support via JS interop in `screen_capture_web.dart` to capture the OS screen outside the app sandbox, with a fallback `screen_capture_stub.dart` for native compilation.
+  - Implemented **Automated Execution** (synthetic taps) using Flutter's `GestureBinding` to seamlessly tap `clickUiElement` coordinates on the glass.
+  - Instructed Gemini to use **Companion Guided Sonar** (verbal spatial guidance + haptic 'navigate' waypoints) for exploratory mode.
+  
+- **Documentation**:
+  - Completely rewrote `README.md` as a clinical user/solutions manual based on real-world Activities of Daily Living (ADLs).
+  - Authored `docs/NATIVE_ARCHITECTURE_BLUEPRINT.md` detailing the migration path to Android `AccessibilityService` and Wearable HID devices.

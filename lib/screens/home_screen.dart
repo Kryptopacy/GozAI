@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:ui';
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
@@ -145,9 +145,38 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     // Wire AI-synthesized UI taps (for UI Navigator mode)
     geminiService.onClickUiElement = (x, y) {
-      // Inject a pointer event at the given normalized coordinates.
+      // Inject a pointer event at the given coordinates.
       // In UI Nav mode, the screen is the camera — Gemini can click for the user.
       debugPrint('GozAI: AI synthesizing tap at ($x, $y)');
+      
+      final size = MediaQuery.of(context).size;
+      // Coordinates from Gemini might be absolute (1080x1920 reference) or normalized (0-1).
+      // Our prompt asks for absolute on a 1080x1920 canvas, so we scale them to the actual device.
+      final dx = (x / 1080) * size.width;
+      final dy = (y / 1920) * size.height;
+      final position = Offset(dx.clamp(0.0, size.width), dy.clamp(0.0, size.height));
+
+      debugPrint('GozAI: Scaled tap to device logical pixels: $position');
+
+      // 1. Dispatch PointerDown
+      GestureBinding.instance.handlePointerEvent(
+        PointerDownEvent(
+          pointer: 999, // Arbitrary pointer ID for synthetic events
+          position: position,
+          kind: PointerDeviceKind.touch,
+        ),
+      );
+
+      // 2. Dispatch PointerUp immediately after
+      Future.delayed(const Duration(milliseconds: 50), () {
+        GestureBinding.instance.handlePointerEvent(
+          PointerUpEvent(
+            pointer: 999,
+            position: position,
+            kind: PointerDeviceKind.touch,
+          ),
+        );
+      });
     };
 
     // Wire spatial context updates (for cognitive mapping)
@@ -200,6 +229,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         geminiService.audioOutputStream.listen((audioData) {
       audioService.queueAudioResponse(audioData);
     });
+
+    // Zero-UI Launch: Automatically start the session and open the mic upon app open
+    if (!geminiService.isConnected && !audioService.isRecording) {
+      debugPrint('GozAI: Auto-starting session for Zero-UI launch.');
+      _toggleSession(geminiService, audioService);
+    }
   }
 
   @override

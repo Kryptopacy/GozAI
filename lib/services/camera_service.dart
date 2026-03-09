@@ -19,7 +19,6 @@ class CameraService extends ChangeNotifier {
   bool _isStreaming = false;
   bool _initFailed = false;
   bool _isCapturing = false;
-  bool _isCapturing = false;
   Timer? _frameTimer;
   double _fps = AppConfig.cameraFps;
 
@@ -53,16 +52,11 @@ class CameraService extends ChangeNotifier {
 
       // On mobile we prefer the rear camera for scene analysis.
       // On web/PC, webcams often report as external, front, or unknown.
-      CameraDescription camera;
-      if (kIsWeb) {
-        // On web just take the first available (usually the default webcam)
-        camera = _cameras.first;
-      } else {
-        camera = _cameras.firstWhere(
-          (c) => c.lensDirection == CameraLensDirection.back,
-          orElse: () => _cameras.first,
-        );
-      }
+      // But for mobile web (PWA), we still want to prefer the back camera.
+      CameraDescription camera = _cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => _cameras.first,
+      );
 
       // ImageFormatGroup.jpeg is NOT supported on Flutter web and causes
       // a CameraException(cameraNotReadable) hardware error. Omit it on web.
