@@ -37,7 +37,17 @@ GozAI is built strictly around the five core Activities of Daily Living (ADLs) t
 
 ## 👨‍⚕️ Clinical Research Foundation (2025-2026)
 
-Every feature in GozAI addresses a documented challenge—not a hypothetical use case.
+Every feature in GozAI addresses a documented challenge—not a hypothetical use case. The system's behavior and constraints are grounded in peer-reviewed research and global health reports:
+
+*   **Seiple W. et al. 2025 (TVST, PMC11721483)** — AI ADL performance for Peripheral Vision Loss.
+*   **WHO World Report on Vision 2019** — Global prevalence (2.2B affected).
+*   **WHO & UNICEF Global Report on Assistive Technology 2022** — 90% access gap for assistive tech.
+*   **Imperial College 2024 (Nature Sci Rep)** — Intuitive directional haptics for navigation.
+*   **NYU Tandon 2024 (JMIR Rehab)** — Synchronized vibro-acoustic feedback efficacy.
+*   **Wittich W. et al. 2021 (JMIR Res Protoc)** — Cognitive load management in AMD rehabilitation.
+*   **Ventura R.B. et al. Jan 2026 (Frontiers Digital Health)** — Factors in Assistive Tech adoption and abandonment.
+*   **NaviGPT, ACM GROUP Jan 2025** — LLM multimodal navigation for People with Visual Impairment.
+*   **Samavati & Abadi, Cureus Oct 2025** — 80-study systematic review of VI assistive technologies.
 
 | Research Finding | The GozAI Implementation |
 |---|---|
