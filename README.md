@@ -39,15 +39,12 @@ GozAI is built strictly around the five core Activities of Daily Living (ADLs) t
 
 Every feature in GozAI addresses a documented challenge—not a hypothetical use case. The system's behavior and constraints are grounded in peer-reviewed research and global health reports:
 
-*   **Seiple W. et al. 2025 (TVST, PMC11721483)** — AI ADL performance for Peripheral Vision Loss.
-*   **WHO World Report on Vision 2019** — Global prevalence (2.2B affected).
-*   **WHO & UNICEF Global Report on Assistive Technology 2022** — 90% access gap for assistive tech.
-*   **Imperial College 2024 (Nature Sci Rep)** — Intuitive directional haptics for navigation.
-*   **NYU Tandon 2024 (JMIR Rehab)** — Synchronized vibro-acoustic feedback efficacy.
-*   **Wittich W. et al. 2021 (JMIR Res Protoc)** — Cognitive load management in AMD rehabilitation.
-*   **Ventura R.B. et al. Jan 2026 (Frontiers Digital Health)** — Factors in Assistive Tech adoption and abandonment.
-*   **NaviGPT, ACM GROUP Jan 2025** — LLM multimodal navigation for People with Visual Impairment.
-*   **Samavati & Abadi, Cureus Oct 2025** — 80-study systematic review of VI assistive technologies.
+*   **[World Health Organization (2019)](https://www.who.int/publications/i/item/9789241516570)** — World Report on Vision (Global prevalence: 2.2B affected).
+*   **[WHO & UNICEF (2022)](https://www.who.int/publications/i/item/9789240049451)** — Global Report on Assistive Technology (90% access gap for assistive tech).
+*   **[Imperial College London (2024)](https://pubmed.ncbi.nlm.nih.gov/38605051/)** — Intuitive directional haptics for navigation (Nature Scientific Reports).
+*   **[NYU Tandon (2024)](https://www.eurekalert.org/news-releases/1031448)** — Wearable system employing synchronized vibro-acoustic feedback (JMIR Rehabilitation and Assistive Technology).
+*   **[Wittich W. et al. (2021)](https://www.researchprotocols.org/2021/3/e26464)** — Cognitive load management in AMD rehabilitation (JMIR Research Protocols).
+*   **[NaviGPT (Group '25, ACM)](https://arxiv.org/abs/2408.08544)** — LLM multimodal navigation for People with Visual Impairment.
 
 | Research Finding | The GozAI Implementation |
 |---|---|

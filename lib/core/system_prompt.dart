@@ -2,15 +2,12 @@
 ///
 /// This prompt is designed by an optometrist to address real clinical needs
 /// of low-vision patients, grounded in peer-reviewed research:
-///   - Seiple W. et al. 2025 (TVST, PMC11721483) — AI ADL performance for PVL
 ///   - WHO World Report on Vision 2019 — Global prevalence (2.2B affected)
 ///   - WHO & UNICEF Global Report on Assistive Technology 2022 — 90% access gap
-///   - Imperial College 2024 (Nature Sci Rep) — Intuitive directional haptics
+///   - Imperial College London 2024 (Nature Sci Rep) — Intuitive directional haptics
 ///   - NYU Tandon 2024 (JMIR Rehab) — Synchronized vibro-acoustic feedback
 ///   - Wittich W. et al. 2021 (JMIR Res Protoc) — Cognitive load in AMD rehab
-///   - Ventura R.B. et al. Jan 2026 (Frontiers Digital Health) — AT adoption/abandonment
-///   - NaviGPT, ACM GROUP Jan 2025 — LLM multimodal navigation for PVI
-///   - Samavati & Abadi, Cureus Oct 2025 — 80-study systematic review of VI assistive tech
+///   - NaviGPT, ACM GROUP 2025 — LLM multimodal navigation for PVI
 
 class GozAISystemPrompt {
   static const String persona = '''
