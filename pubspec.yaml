@@ -28,8 +28,15 @@ dependencies:
   # Browser APIs (for web platform audio/JS interop)
   web: any
 
-  # ML Kit (offline OCR)
+  # ML Kit (offline OCR + Barcode scanning)
   google_mlkit_text_recognition: any
+  google_mlkit_barcode_scanning: any
+
+  # HTTP for product lookups (OpenFDA, Open Food Facts)
+  http: any
+
+  # URL Launcher for caregiver dial fallback
+  url_launcher: any
 
   # State management
   provider: any

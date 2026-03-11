@@ -63,6 +63,7 @@ class GeminiLiveService extends ChangeNotifier {
   void Function(String context)? onSpatialUpdate; // Callback for spatial memory
   void Function()? onInterrupted; // Callback for True Interruption (Barge-in)
   void Function(double x, double y)? onClickUiElement; // AI-synthesized UI taps
+  void Function(String message, String severity)? onSendSosAlert; // Caregiver SOS
 
 
   // Public getters
@@ -275,6 +276,25 @@ class GeminiLiveService extends ChangeNotifier {
                     }
                   },
                   'required': ['description'],
+                }
+              },
+              {
+                'name': 'sendSosAlert',
+                'description': 'Sends an emergency SOS alert to the user\'s designated caregiver via Firestore. Call this IMMEDIATELY if the user says they need help, are lost, feel unsafe, say "emergency", or if their speech sounds panicked or distressed. Do NOT ask for confirmation — act immediately.',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'message': {
+                      'type': 'STRING',
+                      'description': 'A brief, clear description of the situation to send to the caregiver. E.g., "User says they are lost and scared."',
+                    },
+                    'severity': {
+                      'type': 'STRING',
+                      'description': 'Severity of the alert. Use "mild" for confusion/lost. Use "critical" for danger/injury.',
+                      'enum': ['mild', 'critical'],
+                    },
+                  },
+                  'required': ['message', 'severity'],
                 }
               }
             ]
@@ -522,7 +542,16 @@ class GeminiLiveService extends ChangeNotifier {
             onClickUiElement?.call(x, y);
             onTriggerHaptic?.call('tap');
             break;
+          case 'sendSosAlert':
+            final message = args['message'] as String? ?? 'User needs help.';
+            final severity = args['severity'] as String? ?? 'mild';
+            onSendSosAlert?.call(message, severity);
+            // Trigger urgent haptic pattern immediately so user feels the action
+            onTriggerHaptic?.call('hazard');
+            debugPrint('GeminiLive: SOS alert fired — severity: $severity, message: $message');
+            break;
           case 'toggleFlashlight':
+
             final on = args['on'] as bool? ?? false;
             onToggleFlashlight?.call(on);
             break;

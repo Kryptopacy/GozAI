@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
 import '../services/gemini_live_service.dart';
+import '../services/sos_service.dart';
 
 /// Caregiver Dashboard — Pro Aesthetic
 /// Obsidian background, Bioluminescent Malachite Green accents.
@@ -74,7 +75,9 @@ class CaregiverDashboard extends StatelessWidget {
                     'Live monitoring — updates in real time',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
+                  _buildSosAlertBanner(context),
+                  const SizedBox(height: 16),
                   _buildTopMetricsRow(context),
                   const SizedBox(height: 32),
                   Text(
@@ -94,6 +97,107 @@ class CaregiverDashboard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSosAlertBanner(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('sos_alerts')
+          .doc('demo_patient_001')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data?.data() == null) {
+          return const SizedBox.shrink(); // No alert document
+        }
+
+        final data = snapshot.data!.data()!;
+        final resolved = data['resolved'] == true;
+        if (resolved) {
+          return const SizedBox.shrink(); // Alert is resolved
+        }
+
+        final message = data['message'] ?? data['note'] ?? 'Emergency assistance requested.';
+        final severity = data['severity'] ?? 'critical';
+        final isCritical = severity.toString().toLowerCase() == 'critical' || severity.toString().toLowerCase() == 'high';
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: GozAITheme.hazardAlert.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: GozAITheme.hazardAlert, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: GozAITheme.hazardAlert.withValues(alpha: 0.4),
+                blurRadius: 20,
+                spreadRadius: 2,
+              )
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: GozAITheme.hazardAlert, size: 32),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      isCritical ? 'CRITICAL SOS ALERT' : 'PATIENT ASSISTANCE NEEDED',
+                      style: const TextStyle(
+                        color: GozAITheme.hazardAlert,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton(
+                    onPressed: () {
+                      context.read<SosService>().resolveAlert(userId: 'demo_patient_001');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: GozAITheme.hazardAlert,
+                      side: const BorderSide(color: GozAITheme.hazardAlert),
+                    ),
+                    child: const Text('DISMISS'),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      // Navigate to full map or initiate call
+                    },
+                    icon: const Icon(Icons.location_on, color: Colors.white),
+                    label: const Text('LOCATE'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: GozAITheme.hazardAlert,
+                      foregroundColor: Colors.white,
+                    ),
+                  )
+                ],
+              )
+            ],
+          ),
+        );
+      },
     );
   }
 

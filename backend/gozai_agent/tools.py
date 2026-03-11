@@ -132,13 +132,15 @@ def send_sos_alert(
     firestore_written = False
     if _FIREBASE_AVAILABLE and _db is not None:
         try:
-            # Write to the demo patient's clinical_events subcollection.
-            # The caregiver dashboard streams this collection — the alert
-            # will appear in real time on their screen.
-            _db.collection("patients") \
+            # Write to the unified sos_alerts collection so the CaregiverDashboard
+            # picks it up immediately through the dedicated SOS stream.
+            alert_data.update({
+                "userId": "demo_patient_001",
+                "resolved": False,
+            })
+            _db.collection("sos_alerts") \
                .document("demo_patient_001") \
-               .collection("clinical_events") \
-               .add(alert_data)
+               .set(alert_data)
             firestore_written = True
             print(f"[GozAI] SOS alert written to Firestore: {message}")
         except Exception as e:

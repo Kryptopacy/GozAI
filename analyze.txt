@@ -1,0 +1,13 @@
+Analyzing GozAI...                                              
+
+   info - Dangling library doc comment - lib\core\system_prompt.dart:1:1 - dangling_library_doc_comments
+   info - Unnecessary use of multiple underscores - lib\screens\caregiver_dashboard.dart:316:45 - unnecessary_underscores
+  error - The method 'triggerHaptic' isn't defined for the type 'GeminiLiveService' - lib\screens\home_screen.dart:233:31 - undefined_method
+warning - The value of the field '_pingPlayer' isn't used - lib\services\audio_service.dart:36:16 - unused_field
+warning - 'StreamAudioSource' is experimental and could be removed or changed at any time - lib\services\audio_service.dart:287:31 - experimental_member_use
+warning - 'StreamAudioResponse' is experimental and could be removed or changed at any time - lib\services\audio_service.dart:292:10 - experimental_member_use
+warning - 'StreamAudioResponse' is experimental and could be removed or changed at any time - lib\services\audio_service.dart:295:12 - experimental_member_use
+  error - The name 'Size' isn't a class - lib\services\barcode_service_native.dart:19:21 - creation_with_non_type
+warning - The value of the field '_lastAccelMagnitude' isn't used - lib\services\camera_service.dart:27:10 - unused_field
+warning - Unused import: 'package:flutter/gestures.dart' - lib\services\gemini_live_service.dart:5:8 - unused_import
+

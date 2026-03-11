@@ -114,7 +114,24 @@ class OcrService extends ChangeNotifier {
     return matches >= 2; // At least 2 medication-related keywords
   }
 
+  /// Check if recognized text looks like a prescription label (RX drug label).
+  ///
+  /// Prescriptions contain regulatory markers: NDC number, DEA number,
+  /// "Rx only", refill count, prescribing doctor. When this is detected,
+  /// Gemini is instructed to read the drug name letter-by-letter for safety.
+  bool isPrescriptionLabel(OcrResult result) {
+    final keywords = [
+      'rx only', 'rx', 'ndc', 'dea', 'dispense', 'refill',
+      'prescriber', 'prescribed by', 'quantity', 'days supply',
+      'prior auth', 'sig:', 'take as directed',
+    ];
+    final textLower = result.fullText.toLowerCase();
+    final matches = keywords.where((kw) => textLower.contains(kw)).length;
+    return matches >= 2;
+  }
+
   /// Check if recognized text looks like a nutrition/food label.
+
   bool isNutritionLabel(OcrResult result) {
     final keywords = [
       'calories', 'fat', 'protein', 'carbohydrate', 'sodium',

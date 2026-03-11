@@ -19,6 +19,9 @@ import '../services/screen_navigator_service.dart';
 import '../services/light_meter_service.dart';
 import '../services/screen_capture_service.dart';
 import '../services/clinical_telemetry_service.dart';
+import '../services/sos_service.dart';
+import '../services/barcode_service.dart';
+import '../services/product_lookup_service.dart';
 
 /// The main GozAI interface.
 ///
@@ -48,6 +51,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   
   // Clinical Telemetry: track how long patients can read before fatigue
   DateTime? _readingModeStartTime;
+
+  // New Services
+  final SosService _sosService = SosService();
+  final BarcodeService _barcodeService = BarcodeService();
+  final ProductLookupService _productLookupService = ProductLookupService();
+  bool _isScanningBarcode = false;
 
   @override
   void initState() {
@@ -143,6 +152,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     };
 
+    // Wire SOS Caregiver Alert
+    geminiService.onSendSosAlert = (message, severity) {
+      _sosService.sendAlert(
+        userId: 'demo_patient_001', // Target the authorized patient
+        message: message,
+        severity: severity,
+      );
+    };
+
     // Wire AI-synthesized UI taps (for UI Navigator mode)
     geminiService.onClickUiElement = (x, y) {
       // Inject a pointer event at the given coordinates.
@@ -203,6 +221,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // In Read mode, run offline OCR every N frames and send extracted text
       // as grounding context so Gemini is anchored to actual on-screen characters.
       if (geminiService.currentMode == GozAIMode.reading) {
+        // 1. Try barcode scan first for Universal Product Scanner pipeline
+        if (!_isScanningBarcode) {
+          _isScanningBarcode = true;
+          _barcodeService.scanFromBytes(frame).then((barcode) async {
+            if (barcode != null) {
+              final product = await _productLookupService.lookup(barcode);
+              if (product != null) {
+                // Send injected context to Gemini
+                geminiService.sendText(product.toGroundingString());
+                geminiService.triggerHaptic('tap');
+              }
+            }
+            _isScanningBarcode = false;
+          });
+        }
+
+        // 2. Run OCR Grounding every N frames
         _ocrFrameCounter++;
         if (_ocrFrameCounter >= _ocrFrameInterval) {
           _ocrFrameCounter = 0;
