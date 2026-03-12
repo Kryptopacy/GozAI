@@ -76,7 +76,15 @@ GozAI is currently optimized as a Progressive Web App (PWA) to ensure maximum ac
 # Clone the repository
 git clone https://github.com/Kryptopacy/GozAI.git
 cd GozAI
+
+# Create your .env file
 cp .env.example .env
+
+# Mandatory: Open .env and add your keys
+# GEMINI_API_KEY=...
+# FIREBASE_WEB_API_KEY=...
+# FIREBASE_ANDROID_API_KEY=...
+# FIREBASE_IOS_API_KEY=...
 
 # Install dependencies and run
 flutter pub get
