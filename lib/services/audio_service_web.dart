@@ -14,7 +14,7 @@ import 'package:web/web.dart' as web;
 class WebAudioBridge {
   static web.AudioContext? _audioContext;
   static web.MediaStreamAudioSourceNode? _sourceNode;
-  static web.ScriptProcessorNode? _processorNode;
+  static web.AudioWorkletNode? _processorNode;
   static web.MediaStream? _mediaStream;
   static void Function(Uint8List)? _onChunk;
   
@@ -48,22 +48,21 @@ class WebAudioBridge {
       // 3. Create a Source Node from the mic stream
       _sourceNode = _audioContext!.createMediaStreamSource(_mediaStream as web.MediaStream);
 
-      // 4. Create a ScriptProcessor to intercept raw PCM float data
-      _processorNode = _audioContext!.createScriptProcessor(4096, 1, 1);
+      // 4. Load the AudioWorklet module
+      await _audioContext!.audioWorklet.addModule('audio_processor.js').toDart;
 
-      // 5. Setup the audio processing callback with a strong JS reference to prevent GC
-      _jsAudioProcessHandler = _handleAudioProcess.toJS;
-      _processorNode!.addEventListener('audioprocess', _jsAudioProcessHandler!);
+      // 5. Create an AudioWorkletNode to intercept raw PCM float data
+      _processorNode = web.AudioWorkletNode(_audioContext!, 'pcm-processor');
 
-      // 6. Connect Mic -> Processor. 
+      // 6. Setup the message listener for the Worklet's port with strong JS ref
+      _jsAudioProcessHandler = _handleWorkletMessage.toJS;
+      _processorNode!.port.addEventListener('message', _jsAudioProcessHandler!);
+      _processorNode!.port.start(); // Required when using addEventListener on MessagePorts
+
+      // 7. Connect Mic -> Processor
       _sourceNode!.connect(_processorNode!);
-      // CRITICAL FIX: Chrome requires the ScriptProcessor to actually be connected to 
-      // the destination, otherwise it optimizes it away and NEVER fires 'audioprocess'.
-      // However, we don't want to hear our own mic echo, so we connect it to a GainNode set to 0.
-      final dummyGain = _audioContext!.createGain();
-      dummyGain.gain.value = 0.0;
-      _processorNode!.connect(dummyGain);
-      dummyGain.connect(_audioContext!.destination);
+      // Note: AudioWorkletNodes do not need the dummy GainNode anti-GC hack 
+      // as long as their port has an active listener.
 
       debugPrint('WebAudioBridge: PCM16 Recording started at ${_audioContext!.sampleRate} Hz');
       return true;
@@ -73,15 +72,14 @@ class WebAudioBridge {
     }
   }
 
-  // Intercepts the Float32 audio buffers from the browser, converts to 16-bit PCM.
-  static void _handleAudioProcess(web.Event event) {
+  // Intercepts the Float32 audio buffers from the AudioWorklet MessagePort, converts to 16-bit PCM.
+  static void _handleWorkletMessage(web.Event event) {
     if (_onChunk == null) return;
 
-    final audioEvent = event as web.AudioProcessingEvent;
-    final inputBuffer = audioEvent.inputBuffer;
+    final messageEvent = event as web.MessageEvent;
     
-    // Get the first channel (mono) Float32Array bounds [-1.0 to 1.0]
-    final float32JsArray = inputBuffer.getChannelData(0);
+    // The data is the Float32Array we sent via postMessage in the JS worklet
+    final float32JsArray = messageEvent.data as JSFloat32Array;
     
     // Safely cast JSFloat32Array to Dart's Float32List
     final float32Data = float32JsArray.toDart;

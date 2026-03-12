@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
@@ -215,6 +216,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       audioService.stopPlayback();
     };
 
+    // Voice-activated video feed (Debug Camera)
+    geminiService.onToggleDebugCamera = (visible) {
+      debugPrint('GozAI: AI requested to toggle Debug Camera to: $visible');
+      setState(() {
+        _showDebugCamera = visible;
+      });
+      HapticService.alert();
+    };
+
     // Wire hardware re-initialization requests
     geminiService.onRequestHardwareAccess = (hardwareType) async {
       debugPrint('GozAI: Model requested hardware access for: $hardwareType');
@@ -268,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               if (product != null) {
                 // Send injected context to Gemini
                 geminiService.sendText(product.toGroundingString());
-                geminiService.triggerHaptic('tap');
+                HapticService.tap();
               }
             }
             _isScanningBarcode = false;
@@ -353,6 +363,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           children: [
             // Immersive ambient background layer
             _buildAmbientGlowBackground(),
+            
+            // Debug Camera Overlay (Floating Window)
+            _buildDebugCameraOverlay(),
             
             // UI Layer
             SafeArea(
@@ -509,10 +522,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 isActive: isMicOn,
               ),
               const SizedBox(width: 12),
-              _buildStatusChip(
-                icon: isCameraOn ? Icons.videocam : Icons.videocam_off,
-                label: cameraText,
-                isActive: isCameraOn,
+              GestureDetector(
+                onLongPress: () {
+                  setState(() {
+                    _showDebugCamera = !_showDebugCamera;
+                  });
+                  HapticService.alert();
+                  debugPrint('Debug Camera toggled: $_showDebugCamera');
+                },
+                child: _buildStatusChip(
+                  icon: isCameraOn ? Icons.videocam : Icons.videocam_off,
+                  label: cameraText,
+                  isActive: isCameraOn,
+                ),
               ),
             ],
           ),
@@ -975,6 +997,74 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ],
         );
       },
+    );
+  }
+
+  /// Floating Debug Camera window for absolute transparency of what Goz sees.
+  /// Toggled by long-pressing the Camera status chip.
+  Widget _buildDebugCameraOverlay() {
+    return Visibility(
+      visible: _showDebugCamera,
+      child: Positioned(
+        top: 100,
+        right: 20,
+        child: GestureDetector(
+          onPanUpdate: (details) {
+            // Future: Implement dragging if needed
+          },
+          child: Container(
+            width: 140,
+            height: 180,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              border: Border.all(color: GozAITheme.primaryBlue.withValues(alpha: 0.5), width: 2),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black54,
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                )
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Consumer<CameraService>(
+                builder: (context, camera, _) {
+                  if (!camera.isInitialized || camera.controller == null) {
+                    return const Center(child: Icon(Icons.videocam_off, color: Colors.white24, size: 40));
+                  }
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      AspectRatio(
+                        aspectRatio: camera.controller!.value.aspectRatio,
+                        child: CameraPreview(camera.controller!),
+                      ),
+                      // Small indicator showing it's a Live Feed
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.8),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'LIVE',
+                            style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

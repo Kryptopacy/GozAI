@@ -65,6 +65,7 @@ class GeminiLiveService extends ChangeNotifier {
   void Function(String hardwareType)? onRequestHardwareAccess;
   void Function(double x, double y)? onClickUiElement; // AI-synthesized UI taps
   void Function(String message, String severity)? onSendSosAlert; // Caregiver SOS
+  void Function(bool visible)? onToggleDebugCamera; // Voice-activated video feed
 
 
   // Public getters
@@ -314,6 +315,20 @@ class GeminiLiveService extends ChangeNotifier {
                     },
                   },
                   'required': ['message', 'severity'],
+                }
+              },
+              {
+                'name': 'toggleDebugCamera',
+                'description': 'Toggles the visibility of the internal debug camera video feed window on the user\'s screen. Call this when the user asks to see what I see, open the video feed, hide the camera, or show the debug window.',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'visible': {
+                      'type': 'BOOLEAN',
+                      'description': 'True to show the video feed, False to hide it.',
+                    }
+                  },
+                  'required': ['visible'],
                 }
               }
             ]
@@ -585,6 +600,10 @@ class GeminiLiveService extends ChangeNotifier {
           case 'requestHardwareAccess':
             final hardwareType = args['hardwareType'] as String? ?? 'camera';
             onRequestHardwareAccess?.call(hardwareType);
+            break;
+          case 'toggleDebugCamera':
+            final visible = args['visible'] as bool? ?? false;
+            onToggleDebugCamera?.call(visible);
             break;
           default:
             debugPrint('GeminiLive: Unknown tool call $name');
