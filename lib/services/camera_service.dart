@@ -38,6 +38,7 @@ class CameraService extends ChangeNotifier {
   bool get initFailed => _initFailed;
   CameraController? get controller => _controller;
   Stream<Uint8List> get frameStream => _frameController.stream;
+  CameraLensDirection? get currentLensDirection => _controller?.description.lensDirection;
 
   /// Initialize the camera (prefer rear camera).
   Future<void> initialize() async {
@@ -58,23 +59,34 @@ class CameraService extends ChangeNotifier {
         orElse: () => _cameras.first,
       );
 
-      // ImageFormatGroup.jpeg is NOT supported on Flutter web and causes
-      // a CameraException(cameraNotReadable) hardware error. Omit it on web.
-      // Furthermore, requesting ResolutionPreset.low or medium on Web often causes
-      // cameraNotReadable because of rigid hardware constraints. Max allows negotiation.
-      _controller = CameraController(
-        camera,
-        ResolutionPreset.medium,
-        enableAudio: false,
-        imageFormatGroup: kIsWeb ? ImageFormatGroup.unknown : ImageFormatGroup.jpeg,
-      );
+      // Web browsers are extremely strict about formats and resolutions.
+      // If we request ImageFormatGroup.jpeg or a strict ResolutionPreset,
+      // it throws a CameraException(cameraNotReadable) hardware error.
+      // We start with max and fallback to handle Chrome's rigidity.
+      try {
+        _controller = CameraController(
+          camera,
+          ResolutionPreset.max,
+          enableAudio: false,
+          imageFormatGroup: kIsWeb ? ImageFormatGroup.unknown : ImageFormatGroup.jpeg,
+        );
+        await _controller!.initialize();
+      } catch (e) {
+        debugPrint('CameraService: Falling back to lower preset due to: $e');
+        _controller = CameraController(
+          camera,
+          ResolutionPreset.low,
+          enableAudio: false,
+          imageFormatGroup: kIsWeb ? ImageFormatGroup.unknown : ImageFormatGroup.jpeg,
+        );
+        await _controller!.initialize();
+      }
 
-      await _controller!.initialize();
       _initFailed = false;
       notifyListeners();
       debugPrint('CameraService: Initialized with ${camera.name}');
     } catch (e) {
-      debugPrint('CameraService: Initialization failed: $e');
+      debugPrint('CameraService: Initialization failed completely: $e');
       _initFailed = true;
       _controller = null;
       notifyListeners();

@@ -62,6 +62,7 @@ class GeminiLiveService extends ChangeNotifier {
   void Function(bool on)? onToggleFlashlight;
   void Function(String context)? onSpatialUpdate; // Callback for spatial memory
   void Function()? onInterrupted; // Callback for True Interruption (Barge-in)
+  void Function(String hardwareType)? onRequestHardwareAccess;
   void Function(double x, double y)? onClickUiElement; // AI-synthesized UI taps
   void Function(String message, String severity)? onSendSosAlert; // Caregiver SOS
 
@@ -83,7 +84,10 @@ class GeminiLiveService extends ChangeNotifier {
   Stream<String> get statusStream => _statusController.stream;
 
   /// Connect to the Gemini Multimodal Live API via WebSocket.
-  Future<void> connect() async {
+  String? _pendingHardwareContext;
+
+  Future<void> connect({String? hardwareContext}) async {
+    _pendingHardwareContext = hardwareContext;
     if (_connectionState == GeminiConnectionState.connected ||
         _connectionState == GeminiConnectionState.connecting) {
       return;
@@ -265,6 +269,21 @@ class GeminiLiveService extends ChangeNotifier {
                 }
               },
               {
+                'name': 'requestHardwareAccess',
+                'description': 'Requests the app to re-initialize or ask for hardware permissions (camera or mic). Call this if the system context says a sensor is OFF, the user asks you to perform a task requiring that sensor, and you have explained to them that you need to turn it on.',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'hardwareType': {
+                      'type': 'STRING',
+                      'description': 'The hardware to request: "camera" or "mic".',
+                      'enum': ['camera', 'mic'],
+                    }
+                  },
+                  'required': ['hardwareType'],
+                }
+              },
+              {
                 'name': 'updateSpatialContext',
                 'description': 'Stores a key landmark or spatial description in your running mental map of the user\'s environment. Call this when the user enters a new room, passes a major landmark (e.g., stairs, checkout counter, exit), or when the environment changes significantly.',
                 'parameters': {
@@ -419,6 +438,14 @@ class GeminiLiveService extends ChangeNotifier {
       if (data.containsKey('setupComplete')) {
         debugPrint('GeminiLive setup complete');
         _setStatus('Ready');
+        
+        // Inject hardware context if provided
+        if (_pendingHardwareContext != null) {
+          debugPrint('GeminiLive: Injecting hardware context state.');
+          sendText(_pendingHardwareContext!);
+          _pendingHardwareContext = null;
+        }
+        
         return;
       }
 
@@ -435,6 +462,7 @@ class GeminiLiveService extends ChangeNotifier {
 
         // Check if this is an interruption acknowledgment
         if (serverContent['interrupted'] == true) {
+          debugPrint('GeminiLive: Server acknowledged interruption.');
           _isModelSpeaking = false;
           onInterrupted?.call(); // Instantly fire barge-in callback
           notifyListeners();
@@ -551,9 +579,12 @@ class GeminiLiveService extends ChangeNotifier {
             debugPrint('GeminiLive: SOS alert fired — severity: $severity, message: $message');
             break;
           case 'toggleFlashlight':
-
             final on = args['on'] as bool? ?? false;
             onToggleFlashlight?.call(on);
+            break;
+          case 'requestHardwareAccess':
+            final hardwareType = args['hardwareType'] as String? ?? 'camera';
+            onRequestHardwareAccess?.call(hardwareType);
             break;
           default:
             debugPrint('GeminiLive: Unknown tool call $name');

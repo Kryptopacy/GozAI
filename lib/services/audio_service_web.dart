@@ -17,6 +17,11 @@ class WebAudioBridge {
   static web.ScriptProcessorNode? _processorNode;
   static web.MediaStream? _mediaStream;
   static void Function(Uint8List)? _onChunk;
+  
+  // CRITICAL FIX: Keep a strong reference to the JS wrapper of the handler.
+  // Chrome will instantly garbage collect the audioprocess event listener 
+  // if Dart doesn't hold a strong reference to the JSExport/JSFunction.
+  static JSFunction? _jsAudioProcessHandler;
 
   /// Start capturing audio from the browser microphone and converting to PCM16.
   static Future<bool> startRecording({
@@ -46,14 +51,19 @@ class WebAudioBridge {
       // 4. Create a ScriptProcessor to intercept raw PCM float data
       _processorNode = _audioContext!.createScriptProcessor(4096, 1, 1);
 
-      // 5. Setup the audio processing callback
-      _processorNode!.addEventListener('audioprocess', _handleAudioProcess.toJS);
+      // 5. Setup the audio processing callback with a strong JS reference to prevent GC
+      _jsAudioProcessHandler = _handleAudioProcess.toJS;
+      _processorNode!.addEventListener('audioprocess', _jsAudioProcessHandler!);
 
-      // 6. Connect Mic -> Processor. Do NOT connect processor to destination to avoid feedback loops!
+      // 6. Connect Mic -> Processor. 
       _sourceNode!.connect(_processorNode!);
-      // Note: Modern browsers don't strict-require destination connection for audioprocess to fire.
-      // If needed in the future, we can connect it but zero-out the outputBuffer.
-      // _processorNode!.connect(_audioContext!.destination); 
+      // CRITICAL FIX: Chrome requires the ScriptProcessor to actually be connected to 
+      // the destination, otherwise it optimizes it away and NEVER fires 'audioprocess'.
+      // However, we don't want to hear our own mic echo, so we connect it to a GainNode set to 0.
+      final dummyGain = _audioContext!.createGain();
+      dummyGain.gain.value = 0.0;
+      _processorNode!.connect(dummyGain);
+      dummyGain.connect(_audioContext!.destination);
 
       debugPrint('WebAudioBridge: PCM16 Recording started at ${_audioContext!.sampleRate} Hz');
       return true;
@@ -145,11 +155,13 @@ class WebAudioBridge {
     
     _audioContext?.close();
 
+    _processorNode?.removeEventListener('audioprocess', _jsAudioProcessHandler);
     _processorNode = null;
     _sourceNode = null;
     _audioContext = null;
     _mediaStream = null;
     _onChunk = null;
+    _jsAudioProcessHandler = null;
     
     debugPrint('WebAudioBridge: Recording stopped and graph dismantled.');
   }

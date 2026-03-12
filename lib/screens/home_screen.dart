@@ -58,6 +58,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final ProductLookupService _productLookupService = ProductLookupService();
   bool _isScanningBarcode = false;
 
+  bool _showDebugCamera = false;
+
   @override
   void initState() {
     super.initState();
@@ -213,6 +215,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       audioService.stopPlayback();
     };
 
+    // Wire hardware re-initialization requests
+    geminiService.onRequestHardwareAccess = (hardwareType) async {
+      debugPrint('GozAI: Model requested hardware access for: $hardwareType');
+      if (hardwareType == 'camera') {
+        final cameraService = context.read<CameraService>();
+        await cameraService.initialize();
+        if (cameraService.isInitialized && !cameraService.initFailed) {
+          cameraService.startStreaming();
+        }
+      } else if (hardwareType == 'mic') {
+        final audioSvc = context.read<AudioService>();
+        await audioSvc.startRecording();
+      }
+      
+      // Send an updated hardware context to inform Gemini if the request succeeded
+      setState(() {
+         // UI will rebuild and chips will update
+      });
+      
+      // Inject the current state back
+      String hardwareContext = '[SYSTEM - HARDWARE CAPABILITIES UPDATE]\\n';
+      if (context.read<AudioService>().isRecording) {
+        hardwareContext += '- Microphone: ON\\n';
+      } else {
+        hardwareContext += '- Microphone: OFF (Failed to start)\\n';
+      }
+      
+      final cam = context.read<CameraService>();
+      if (cam.isInitialized && !cam.initFailed) {
+         hardwareContext += '- Camera: ON\\n';
+      } else {
+         hardwareContext += '- Camera: OFF/FAILED\\n';
+      }
+      geminiService.sendText(hardwareContext);
+    };
+
     // Wire camera frames → Gemini (with OCR grounding in Read mode)
     _frameSubscription = cameraService.frameStream.listen((frame) {
       if (geminiService.currentMode == GozAIMode.uiNav) return; // UI nav uses screen frames
@@ -321,6 +359,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: Column(
                 children: [
                   _buildStatusBar(),
+                  const SizedBox(height: 8),
+                  _buildHardwareStatusIndicators(),
                   const Spacer(flex: 1),
                   _buildCentralButton(),
                   const Spacer(flex: 2),
@@ -437,6 +477,72 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         );
       },
+    );
+  }
+
+  /// Row of chips showing realtime Mic and Camera hardware states.
+  Widget _buildHardwareStatusIndicators() {
+    return Consumer3<GeminiLiveService, AudioService, CameraService>(
+      builder: (context, gemini, audio, camera, _) {
+        final isMicOn = audio.isRecording;
+        final isCameraOn = camera.isInitialized && !camera.initFailed;
+        String cameraText = 'Camera: Off';
+        if (isCameraOn) {
+          final dir = camera.currentLensDirection;
+          if (dir == CameraLensDirection.front) {
+            cameraText = 'Camera: Front';
+          } else if (dir == CameraLensDirection.back) {
+            cameraText = 'Camera: Rear';
+          } else {
+            cameraText = 'Camera: On';
+          }
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildStatusChip(
+                icon: isMicOn ? Icons.mic : Icons.mic_off,
+                label: isMicOn ? 'Mic: On' : 'Mic: Off',
+                isActive: isMicOn,
+              ),
+              const SizedBox(width: 12),
+              _buildStatusChip(
+                icon: isCameraOn ? Icons.videocam : Icons.videocam_off,
+                label: cameraText,
+                isActive: isCameraOn,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusChip({required IconData icon, required String label, required bool isActive}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isActive ? GozAITheme.success.withValues(alpha: 0.1) : GozAITheme.hazardAlert.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isActive ? GozAITheme.success.withValues(alpha: 0.3) : GozAITheme.hazardAlert.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: isActive ? GozAITheme.success : GozAITheme.hazardAlert),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
     );
   }
 
@@ -653,8 +759,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         return;
       }
 
-      // Start Gemini streaming session
-      await gemini.connect();
+      // Start hardware first to verify permissions/state
       await audio.startRecording();
       if (!mounted) return;
       final cameraService = context.read<CameraService>();
@@ -667,16 +772,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         screenCapture.stopStreaming();
         cameraService.startStreaming();
       }
-      
-      if (cameraService.initFailed || !cameraService.isInitialized) {
-        // Force the model into strict blind mode since the camera threw an exception (e.g. privacy shutter)
-        gemini.sendText(
-          'System Notification: The user camera is hardware-disabled or blocked by a privacy shutter. '
-          'You are completely blind and CANNOT see the environment. '
-          'Do NOT attempt to describe the user\'s surroundings or assume they are safe. '
-          'Acknowledge this limitation immediately.'
-        );
+
+      // Build definitive hardware truth state
+      String hardwareContext = '[SYSTEM - HARDWARE CAPABILITIES UPDATE]\n';
+      if (audio.isRecording) {
+        hardwareContext += '- Microphone: ON (You can hear the user.)\n';
+      } else {
+        hardwareContext += '- Microphone: OFF (User CANNOT speak to you. They can only hear you. Remind them to check app mic permissions so you can converse.)\n';
       }
+      
+      if (cameraService.isInitialized && !cameraService.initFailed) {
+         hardwareContext += '- Camera: ON (${cameraService.currentLensDirection?.name ?? 'unknown'} lens)\n';
+      } else {
+         hardwareContext += '- Camera: OFF/FAILED (You are completely BLIND. You CANNOT see the environment. Remind the user that enabling the camera provides critical safety and navigation assistance, but confirm you are still here to help verbally.)\n';
+      }
+
+      // Start Gemini streaming session with injected hardware state
+      await gemini.connect(hardwareContext: hardwareContext);
 
       HapticService.connected();
     }

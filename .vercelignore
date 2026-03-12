@@ -1,0 +1,21 @@
+# Ignore heavy directories that blow past Vercel's 100MB limit
+# Only build/web needs to be deployed (the compiled Flutter web app)
+.dart_tool
+backend
+chrome
+android
+ios
+windows
+linux
+macos
+lib
+test
+assets
+docs
+.github
+.agents
+.idea
+.vercel
+.git
+analyze.txt
+pubspec.lock
