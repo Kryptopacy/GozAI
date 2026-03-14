@@ -195,6 +195,18 @@ GozAI's features are grounded in clinical research on Activities of Daily Living
 
 **Research sources:** NIH, University of Washington, American Academy of Ophthalmology, American Optometric Association, National Eye Institute.
 
+## 🧠 Technical Maturity & Design Decisions
+
+### Why Hardcoded Clinical Data? 
+In `backend/gozai_agent/rag_service.py`, you will find hardcoded datasets for optometry guidelines and medication safety. This is a deliberate design choice:
+- **Speed**: Instant lookup for critical safety information (0ms latency).
+- **Grounding**: Ensures Gemini is strictly constrained by peer-reviewed research (WHO, NEI, Nature) even in high-latency network states.
+- **Reliability**: Provides a deterministic fallback if external APIs (like OpenFDA) are throttled or unreachable during a hazard event.
+
+### Security and Platform
+- **Firebase Keys**: Hardcoded in `GoogleService-Info.plist` follows standard Firebase client initialization patterns. Access is restricted via Firestore Security Rules.
+- **Barge-In**: Leverages the Gemini Multimodal Live API's bidirectional WebSocket to support natural, voice-driven interruptions without UI lag.
+
 ---
 
 ## 📜 License
