@@ -2,7 +2,11 @@
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/build/web/$1"
+    },
+    {
+      "source": "/",
+      "destination": "/build/web/index.html"
     }
   ],
   "headers": [
