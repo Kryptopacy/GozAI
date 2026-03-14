@@ -30,7 +30,7 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-# /build/ (Un-ignored for Vercel deployment of Gold Master)
+/build/
 !/build/web/
 /coverage/
 
