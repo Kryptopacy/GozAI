@@ -69,6 +69,8 @@ docs/demo_script.md
 docs/pitch_notes.md
 
 # Local analysis/scratch files
+*.txt
+build_*.txt
 analyze_output.txt
 skills-lock.json
 

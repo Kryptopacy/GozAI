@@ -1,13 +1,40 @@
 # 👁️ GozAI — Your Voice-First Emotional & Accessibility Copilot
 
 ![Flutter](https://img.shields.io/badge/Flutter-3.41-blue?logo=flutter)
-![Gemini](https://img.shields.io/badge/Gemini_Live_API-2.0_flash_exp-green?logo=google)
+![Gemini](https://img.shields.io/badge/Gemini_Live_API-2.0_flash-green?logo=google)
+![Cloud Run](https://img.shields.io/badge/Google_Cloud_Run-Deployed-4285F4?logo=googlecloud&logoColor=white)
+![Firebase](https://img.shields.io/badge/Firebase-Firestore-FFCA28?logo=firebase&logoColor=black)
+
+[![GozAI Demo Video](https://img.shields.io/badge/▶_Watch_Demo_Video-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://github.com/Kryptopacy/GozAI)
+
+**GozAI is an empathetic, voice-first companion that acts as the eyes and hands for people with low vision, bridging the gap between them and inaccessible digital/physical environments.**
+
+👉 **[Try the Live Web Demo Here](https://gozai.vercel.app)** 👈
 
 > **"GozAI isn't just an app that looks at things — it's an empathetic, continuously aware copilot that restores independence and psychological safety."**
 
 Low vision affects over **2.2 billion people globally**. Standard screen readers fail when faced with unlabelled digital UIs, and traditional AI tools require you to manually snap photos like a robot, causing cognitive fatigue. The psychological toll—loneliness, frustration, and anxiety—is massive, yet entirely ignored by modern tech.
 
 **GozAI fixes this.** We engineered a real-time, voice-first companion using the **Gemini Multimodal Live API**. Goz acts as your eyes, your hands on digital screens, and a supportive talk-partner when you need one.
+
+---
+
+## ✨ Comprehensive Feature Matrix
+
+| Feature | Description | Status |
+|---|---|---|
+| **Empathetic Voice Persona** | Clinically tuned to reduce anxiety; acts as a supportive talk-partner. | ✅ Live |
+| **Zero-UI Launch** | Opens instantly to an active mic via voice assistant (e.g., "Hey Siri, open Goz"). | ✅ Live |
+| **Seamless Barge-In** | Natural interruptions instantly halt AI speech and audio buffers. | ✅ Live |
+| **UI Navigator (Screen Capture)** | Captures OS-level/browser screens to read unlabelled UI elements. | ✅ Live |
+| **Synthetic UI Taps** | GozAI calculates coordinates and injects synthetic taps for the user. | ✅ Live |
+| **Caregiver SOS System** | Autonomously detects distress and triggers urgent Firestore alerts. | ✅ Live |
+| **Universal Product Scanner** | Native barcode scanning + OpenFDA/OpenFoodFacts data grounding. | ✅ Live |
+| **Companion Memory** | Remembers user facts (medications, names, preferences) across sessions natively via Firestore. | ✅ Live |
+| **Hardware Re-activation** | Proactively identifies disabled cameras/mics and offers to re-initialize them autonomously. | ✅ Live |
+| **Auto Language Detection** | Mirrors the user's spoken language instantly; fully voice-controlled. | ✅ Live |
+| **Edge Case Resilience** | Detects offline states and critically low battery, warning the user proactively. | ✅ Live |
+| **Semantic Vibro-Acoustics** | Uses synchronized haptics for navigation / hazard warnings to reduce cognitive load. | ✅ Live |
 
 ---
 
@@ -58,8 +85,12 @@ Every feature in GozAI addresses a documented challenge—not a hypothetical use
 
 GozAI is currently optimized as a Progressive Web App (PWA) to ensure maximum accessibility across any device immediately, without waiting for App Store approvals.
 
+![GozAI System Architecture](./docs/architecture_diagram.png)
+
 *   **Frontend:** Flutter Web (Brutalist-accessible, high-contrast UI).
-*   **Cognitive Engine:** Gemini 2.0 Flash Multimodal (WebSockets).
+*   **Cognitive Engine:** Gemini 2.0 Flash Multimodal Live API (Bidirectional WebSocket — real-time audio + video simultaneously).
+*   **Backend Agent:** Google ADK Agent on Cloud Run with 4 registered tools (Optometry, Medication/OpenFDA, SOS, Clinical Stats).
+*   **Data Layer:** Firebase Firestore as an agent-native interface powering Companion Memory, Caregiver SOS, and Doctor telemetry.
 *   **Execution Bridge:** In-App Synthetic Gestures (Flutter `GestureBinding`) and `getDisplayMedia` for screen capture.
 *   **The Future (Native):** See `docs/NATIVE_ARCHITECTURE_BLUEPRINT.md` for our post-hackathon roadmap detailing how GozAI scales to Android `AccessibilityService` (for OS-wide Ghost Touch) and Smart Glasses (Bluetooth HID).
 

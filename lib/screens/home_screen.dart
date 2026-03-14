@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:flutter/foundation.dart';
-import 'package:web/web.dart' as web;
+import '../services/platform_monitor.dart';
 import '../core/theme.dart';
 import '../services/gemini_live_service.dart';
 import '../services/camera_service.dart';
@@ -23,6 +23,7 @@ import '../services/clinical_telemetry_service.dart';
 import '../services/sos_service.dart';
 import '../services/barcode_service.dart';
 import '../services/product_lookup_service.dart';
+import '../services/user_memory_service.dart';
 
 /// The main GozAI interface.
 ///
@@ -61,6 +62,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   bool _showDebugCamera = false;
 
+  // Idle check-in: if the user is silent for too long, Goz gently checks in
+  Timer? _idleCheckInTimer;
+  static const Duration _idleCheckInDuration = Duration(seconds: 90);
+
+  // Edge cases: offline detection + battery monitoring
+  bool _wasOffline = false;
+  bool _lowBatteryWarned = false;
+  late final PlatformMonitor _platformMonitor;
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +84,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+    
+    _platformMonitor = PlatformMonitor();
 
     // Wire up services after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) => _initializeServices());
@@ -90,6 +102,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     await cameraService.initialize();
 
     if (!mounted) return; // Prevent using context across async gaps
+
+    // Edge case: monitor connectivity and battery (using platform monitor)
+    _setupPlatformMonitoring();
 
     // Bind screen navigator to Gemini
     screenNav.bindGeminiService(geminiService);
@@ -261,6 +276,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       geminiService.sendText(hardwareContext);
     };
 
+    // Wire companion memory: Gemini can call rememberFact to persist user info
+    geminiService.onRememberFact = (category, fact) {
+      final memoryService = context.read<UserMemoryService>();
+      memoryService.storeFact(
+        userId: 'demo_patient_001',
+        category: category,
+        fact: fact,
+      );
+    };
+
     // Wire camera frames → Gemini (with OCR grounding in Read mode)
     _frameSubscription = cameraService.frameStream.listen((frame) {
       if (geminiService.currentMode == GozAIMode.uiNav) return; // UI nav uses screen frames
@@ -296,6 +321,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     });
 
+    // Reset idle timer whenever audio is being sent (user is talking)
+    _audioInputSubscription = audioService.audioChunkStream.listen((_) {
+      _resetIdleTimer();
+    });
+
     // Wire internal UI frames → Gemini (For UI Navigator mode)
     _screenCaptureSubscription = screenCapture.frameStream.listen((frame) {
       if (geminiService.currentMode != GozAIMode.uiNav) return;
@@ -327,7 +357,77 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _screenCaptureSubscription?.cancel();
     _audioInputSubscription?.cancel();
     _audioOutputSubscription?.cancel();
+    _idleCheckInTimer?.cancel();
+    _platformMonitor.dispose();
     super.dispose();
+  }
+
+  /// Resets the idle check-in timer. Called every time audio is sent.
+  void _resetIdleTimer() {
+    _idleCheckInTimer?.cancel();
+    _idleCheckInTimer = Timer(_idleCheckInDuration, _onIdleCheckIn);
+  }
+
+  /// Fired when the user has been silent for [_idleCheckInDuration].
+  void _onIdleCheckIn() {
+    if (!mounted) return;
+    final gemini = context.read<GeminiLiveService>();
+    if (!gemini.isConnected) return;
+    gemini.sendText(
+      '[SYSTEM - IDLE CHECK-IN]: The user has been silent for a while. '
+      'Gently check in with a single short sentence. Do NOT be annoying — '
+      'just a brief "Still here if you need me" or similar. '
+      'If they do not respond after this, stay completely silent.'
+    );
+    debugPrint('GozAI: Idle check-in triggered after ${_idleCheckInDuration.inSeconds}s of silence.');
+  }
+
+  void _setupPlatformMonitoring() {
+    _platformMonitor.setupConnectivityMonitoring(
+      onOffline: () {
+        _wasOffline = true;
+        if (!mounted) return;
+        final gemini = context.read<GeminiLiveService>();
+        if (gemini.isConnected) {
+          gemini.sendText(
+            '[SYSTEM - CONNECTIVITY LOST]: The device has lost internet connection. '
+            'Inform the user briefly that you may disconnect, but will reconnect when internet is back.'
+          );
+        }
+      },
+      onOnline: () {
+        if (!_wasOffline) return;
+        _wasOffline = false;
+        if (!mounted) return;
+        final gemini = context.read<GeminiLiveService>();
+        if (gemini.isConnected) {
+          gemini.sendText(
+            '[SYSTEM - CONNECTIVITY RESTORED]: Internet connection is back. '
+            'Briefly reassure the user that you are back online.'
+          );
+        }
+      },
+    );
+
+    _platformMonitor.setupBatteryMonitoring(
+      onLowBattery: (level, charging) {
+        if (level <= 0.15 && !charging && !_lowBatteryWarned) {
+          _lowBatteryWarned = true;
+          if (!mounted) return;
+          final gemini = context.read<GeminiLiveService>();
+          if (gemini.isConnected) {
+            final percent = (level * 100).round();
+            gemini.sendText(
+              '[SYSTEM - LOW BATTERY]: Device battery is at $percent%. '
+              'Briefly warn the user that their battery is low and suggest charging '
+              'to keep GozAI available for their safety.'
+            );
+          }
+        } else if (level > 0.20) {
+          _lowBatteryWarned = false; // Reset if battery recovers
+        }
+      },
+    );
   }
 
   /// Handle physical volume button presses for hands-free control.
@@ -396,7 +496,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.remove_red_eye_outlined, color: GozAITheme.primaryBlue, size: 24),
+          Image.asset(
+            'assets/logos/gozai_premium_lens_1772805910787.png',
+            height: 32,
+            semanticLabel: 'GozAI Premium Lens Logo',
+          ),
           const SizedBox(width: 8),
           Text(
             'GozAI',
@@ -809,8 +913,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
          hardwareContext += '- Camera: OFF/FAILED (You are completely BLIND. You CANNOT see the environment. Remind the user that enabling the camera provides critical safety and navigation assistance, but confirm you are still here to help verbally.)\n';
       }
 
-      // Start Gemini streaming session with injected hardware state
+      // Load companion memory and build context
+      final memoryService = context.read<UserMemoryService>();
+      await memoryService.loadMemory('demo_patient_001');
+      final memoryContext = memoryService.buildMemoryContext();
+      if (memoryContext != null) {
+        hardwareContext += '\n$memoryContext';
+      }
+
+      // Start Gemini streaming session with injected hardware + memory state
       await gemini.connect(hardwareContext: hardwareContext);
+
+      // Start the idle check-in timer
+      _resetIdleTimer();
 
       HapticService.connected();
     }
@@ -905,29 +1020,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   /// pitch-shifted tone (200–800 Hz). Lower Hz = darker, higher Hz = brighter.
   /// Short duration (180ms) prevents tones from colliding into a continuous drone.
   void _playLightMeterTone(double frequency) {
-    if (!kIsWeb) return;
-    try {
-      // We use package:web's AudioContext which is the standard Web Audio API
-      final ctx = web.AudioContext();
-      final oscillator = ctx.createOscillator();
-      final gain = ctx.createGain();
-
-      oscillator.type = 'sine';
-      oscillator.frequency.value = frequency.clamp(200.0, 800.0);
-
-      // Gentle envelope: fade in over 10ms, sustain, fade out over 50ms
-      gain.gain.setValueAtTime(0.001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.01);
-      gain.gain.setValueAtTime(0.15, ctx.currentTime + 0.13);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
-
-      oscillator.connect(gain);
-      gain.connect(ctx.destination);
-      oscillator.start();
-      oscillator.stop(ctx.currentTime + 0.18);
-    } catch (e) {
-      debugPrint('LightMeter tone error: $e');
-    }
+    _platformMonitor.playTone(frequency, 0.18);
   }
 
   /// Immersive ambient glowing orbs that react to Gemini state

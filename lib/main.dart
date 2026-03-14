@@ -17,6 +17,7 @@ import 'services/screen_navigator_service.dart';
 import 'services/light_meter_service.dart';
 import 'services/screen_capture_service.dart';
 import 'services/clinical_telemetry_service.dart';
+import 'services/user_memory_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/caregiver_dashboard.dart';
 import 'screens/doctor_dashboard.dart';
@@ -75,6 +76,7 @@ class GozAIApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => LightMeterService()),
         ChangeNotifierProvider(create: (_) => ScreenCaptureService()),
         ChangeNotifierProvider(create: (_) => ClinicalTelemetryService()),
+        ChangeNotifierProvider(create: (_) => UserMemoryService()),
       ],
       child: Consumer<ScreenCaptureService>(
         builder: (context, screenCapture, child) {

@@ -65,6 +65,7 @@ class GeminiLiveService extends ChangeNotifier {
   void Function(String hardwareType)? onRequestHardwareAccess;
   void Function(double x, double y)? onClickUiElement; // AI-synthesized UI taps
   void Function(String message, String severity)? onSendSosAlert; // Caregiver SOS
+  void Function(String category, String fact)? onRememberFact; // Companion memory
   void Function(bool visible)? onToggleDebugCamera; // Voice-activated video feed
 
 
@@ -315,6 +316,25 @@ class GeminiLiveService extends ChangeNotifier {
                     },
                   },
                   'required': ['message', 'severity'],
+                }
+              },
+              {
+                'name': 'rememberFact',
+                'description': 'Saves an important fact about the user to persistent memory so you can recall it in future sessions. Call this when you learn something worth remembering: their name, a medication they take, their caregiver\'s name, a place they frequent, a food allergy, a preference, etc. Do NOT remember trivial conversational details.',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'category': {
+                      'type': 'STRING',
+                      'description': 'Category of the fact. Use: medication, person, place, allergy, preference, health, or general.',
+                      'enum': ['medication', 'person', 'place', 'allergy', 'preference', 'health', 'general'],
+                    },
+                    'fact': {
+                      'type': 'STRING',
+                      'description': 'The fact to remember. E.g., "User takes Metformin 500mg twice daily." or "Caregiver\'s name is Sarah."',
+                    },
+                  },
+                  'required': ['category', 'fact'],
                 }
               },
               {
@@ -600,6 +620,14 @@ class GeminiLiveService extends ChangeNotifier {
           case 'requestHardwareAccess':
             final hardwareType = args['hardwareType'] as String? ?? 'camera';
             onRequestHardwareAccess?.call(hardwareType);
+            break;
+          case 'rememberFact':
+            final category = args['category'] as String? ?? 'general';
+            final fact = args['fact'] as String? ?? '';
+            if (fact.isNotEmpty) {
+              onRememberFact?.call(category, fact);
+              debugPrint('GeminiLive: Remembering fact [$category]: $fact');
+            }
             break;
           case 'toggleDebugCamera':
             final visible = args['visible'] as bool? ?? false;
