@@ -47,6 +47,7 @@ app.*.map.json
 
 # Environment secrets
 .env
+assets/app.env
 
 # Python
 __pycache__/

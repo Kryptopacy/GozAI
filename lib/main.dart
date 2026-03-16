@@ -25,8 +25,11 @@ import 'screens/doctor_dashboard.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment configuration FIRST before Firebase
-  await dotenv.load(fileName: '.env');
+  // Load environment configuration FIRST before Firebase.
+  // NOTE: We use 'assets/app.env' (not '.env') because dotfiles are excluded
+  // from Flutter web builds and Firebase Hosting ignores them via the '**/.*'
+  // rule. A plain file under assets/ is correctly bundled and served.
+  await dotenv.load(fileName: 'assets/app.env');
 
   // Initialize Firebase using the generated options
   await Firebase.initializeApp(

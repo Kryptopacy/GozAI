@@ -240,7 +240,7 @@ class GeminiLiveService extends ChangeNotifier {
               },
               {
                 'name': 'clickUiElement',
-                'description': 'Taps a specific UI element on the screen in UI NAVIGATOR mode. Use the x and y coordinates of the element you see in the screenshot. Coordinates should be relative to a standard 1080x1920 logical screen, though the relative position is most important.',
+                'description': 'Taps a specific UI element on the screen in UI NAVIGATOR mode. Use the x and y coordinates of the element you see in the screenshot. Coordinates should be relative to a standard 1080x1920 logical screen, though the relative position is most important. NOTE: This tool currently synthesizes taps within the Flutter app environment but is engineered with (x,y) arguments to bridge directly to OS accessibility services (e.g., Android AccessibilityNodeInfo or Windows UIAutomation) for arbitrary OS-level app control in the native architecture.',
                 'parameters': {
                   'type': 'OBJECT',
                   'properties': {

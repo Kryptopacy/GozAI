@@ -2,6 +2,21 @@ import os
 import numpy as np
 import google.genai as genai
 
+# Try to initialize Firebase for dynamic RAG fetching from Cloud Firestore
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore as fb_firestore
+
+    if not firebase_admin._apps:
+        # On Cloud Run: uses Application Default Credentials automatically.
+        firebase_admin.initialize_app()
+
+    fir_db = fb_firestore.client()
+    FIREBASE_AVAILABLE = True
+except Exception as _firebase_init_err:
+    fir_db = None
+    FIREBASE_AVAILABLE = False
+
 # Hardcoded datasets extracted from the old tools.py
 OPTOMETRY_DATA = {
     "light sensitivity": {
@@ -187,9 +202,40 @@ class SemanticKnowledgeBase:
         self.medication_embeddings = {}
         self.stats_embeddings = {}
         
+        # Store active data sources
+        self.optometry_data = OPTOMETRY_DATA.copy()
+        self.medication_data = MEDICATION_DATA.copy()
+        self.stats_data = LOW_VISION_STATS.copy()
+        
         # Build index if client allows. In a real app we would cache these vectors.
         self._build_index()
         self._initialized = True
+
+    def _fetch_from_firestore(self):
+        """Fetches dynamic RAG documents from Firestore (Cloud Architecture proof)."""
+        if FIREBASE_AVAILABLE and fir_db is not None:
+            try:
+                # Fetch live RAG documents from Firestore
+                docs = fir_db.collection("gozai_rag_data").stream()
+                loaded_count = 0
+                for doc in docs:
+                    data = doc.to_dict()
+                    domain = data.get("domain")
+                    key = data.get("key")
+                    payload = data.get("data")
+                    if domain == "optometry" and key and payload:
+                        self.optometry_data[key] = payload
+                        loaded_count += 1
+                    elif domain == "medication" and key and payload:
+                        self.medication_data[key] = payload
+                        loaded_count += 1
+                    elif domain == "statistics" and key and payload:
+                        self.stats_data[key] = payload
+                        loaded_count += 1
+                if loaded_count > 0:
+                    print(f"Successfully loaded {loaded_count} dynamic RAG documents from Firestore.")
+            except Exception as e:
+                print(f"Failed to load dynamic RAG from Firestore, falling back to local clinical cache. Error: {e}")
 
     def _build_index(self):
         if not self.client:
@@ -197,8 +243,11 @@ class SemanticKnowledgeBase:
             
         print("Building SemanticKnowledgeBase index...")
         
+        # Overwrite with any live data from Firestore before embedding
+        self._fetch_from_firestore()
+        
         # 1. Embed Optometry Keys
-        for condition, info in OPTOMETRY_DATA.items():
+        for condition, info in self.optometry_data.items():
             # Embed a rich description so similarity is high for synonymous queries
             text_to_embed = f"Condition: {condition}. Effects: {info['answer']}"
             try:
@@ -211,7 +260,7 @@ class SemanticKnowledgeBase:
                 print(f"Error embedding optometry data '{condition}': {e}")
                 
         # 2. Embed Medication Keys
-        for med, info in MEDICATION_DATA.items():
+        for med, info in self.medication_data.items():
             text_to_embed = f"Medication: {med}. Use: {info['common_use']}. Type: {info['type']}."
             try:
                 response = self.client.models.embed_content(
@@ -223,7 +272,7 @@ class SemanticKnowledgeBase:
                 print(f"Error embedding medication data '{med}': {e}")
                 
         # 3. Embed Stats Keys
-        for stat, info in LOW_VISION_STATS.items():
+        for stat, info in self.stats_data.items():
             text_to_embed = f"Low Vision Statistic about {stat}: {info['statistic']} {info['context']}"
             try:
                 response = self.client.models.embed_content(
@@ -255,13 +304,13 @@ class SemanticKnowledgeBase:
         # Choose domain
         if domain == "optometry":
             db = self.optometry_embeddings
-            source_data = OPTOMETRY_DATA
+            source_data = self.optometry_data
         elif domain == "medication":
             db = self.medication_embeddings
-            source_data = MEDICATION_DATA
+            source_data = self.medication_data
         elif domain == "statistics":
             db = self.stats_embeddings
-            source_data = LOW_VISION_STATS
+            source_data = self.stats_data
         else:
             return {"found": False, "error": "Invalid domain."}
 
