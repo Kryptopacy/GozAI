@@ -98,7 +98,7 @@ def resolve_web():
 '''
         # insert before last brace
         head_content = head_content.rstrip()
-        final_content = head_content[:-1] + play_ping + "}\n"
+        final_content = head_content.removesuffix('}') + play_ping + "}\n"
         with open(path, 'w', encoding='utf-8') as f:
             f.write(final_content)
 
