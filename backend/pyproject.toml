@@ -12,5 +12,6 @@ dependencies = [
     "numpy>=1.26.0",
     "firebase-admin>=6.5.0",
     "google-cloud-logging>=3.10.0",
+    "pytest>=9.0.2",
 ]
 

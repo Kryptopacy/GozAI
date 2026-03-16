@@ -17,6 +17,7 @@ class LightMeterService extends ChangeNotifier {
   StreamSubscription? _sensorSubscription;
   bool _isActive = false;
   double _currentLux = 0;
+  double _currentTilt = 0; // Cached tilt for combined feedback
   LightLevel _lightLevel = LightLevel.unknown;
   Timer? _toneTimer;
 
@@ -49,21 +50,22 @@ class LightMeterService extends ChangeNotifier {
   void start() {
     if (_isActive) return;
     _isActive = true;
+    _currentTilt = 0;
     notifyListeners();
 
     // Accelerometer sensor is not available on web
     if (!kIsWeb) {
       _sensorSubscription = accelerometerEventStream().listen((event) {
         // Calculate device tilt angle (used for orientation feedback)
-        final tilt = atan2(event.y, event.z) * (180 / pi);
-        _updateOrientationFeedback(tilt);
+        // atan2 returns radians, we convert to degrees
+        _currentTilt = atan2(event.y, event.z) * (180 / pi);
       });
     }
 
-    // Periodically estimate ambient light from camera exposure
+    // Periodically pulse the audio feedback
     _toneTimer = Timer.periodic(
-      const Duration(milliseconds: 200),
-      (_) => _updateTone(),
+      const Duration(milliseconds: 150),
+      (_) => _emitCombinedFeedback(),
     );
 
     debugPrint('LightMeter: Started');
@@ -88,12 +90,8 @@ class LightMeterService extends ChangeNotifier {
   }
 
   /// Estimate lux from camera frame brightness.
-  ///
-  /// Takes the average pixel brightness of a camera frame
-  /// and maps it to an approximate lux value.
   void estimateFromFrameBrightness(double averageBrightness) {
-    // Map 0-255 brightness to approximate lux range
-    // This is a rough estimation — sufficient for orientation
+    // Map 0-255 brightness to approximate lux range (0-10,000)
     final estimatedLux = (averageBrightness / 255.0) * 10000;
     updateLux(estimatedLux);
   }
@@ -107,24 +105,22 @@ class LightMeterService extends ChangeNotifier {
     return LightLevel.veryBright;
   }
 
-  /// Update orientation-based audio feedback.
-  /// As the user pans toward brighter areas, pitch rises.
-  void _updateOrientationFeedback(double tiltDegrees) {
-    // Map tilt to a frequency range (200Hz-800Hz)
-    // Higher pitch = brighter direction
-    final normalizedTilt = (tiltDegrees + 90) / 180; // 0.0 to 1.0
-    final frequency = 200 + (normalizedTilt * 600);
-    onToneUpdate?.call(frequency.clamp(200, 800));
-  }
+  /// Emits a single, combined tone representing both light level AND orientation.
+  /// Base Frequency: Derived from Lux (Brighter = Higher)
+  /// Pitch Shift: Derived from Tilt (Level with horizon = Pure tone, Tilted = Offset)
+  void _emitCombinedFeedback() {
+    if (!_isActive || onToneUpdate == null) return;
 
-  /// Update the audio tone based on current light level.
-  void _updateTone() {
-    if (!_isActive) return;
-
-    // Map lux to frequency: darker = lower tone, brighter = higher
+    // 1. Base Frequency from Lux (200Hz - 800Hz)
     final normalizedLux = (_currentLux / 10000).clamp(0.0, 1.0);
-    final frequency = 200 + (normalizedLux * 600);
-    onToneUpdate?.call(frequency);
+    double frequency = 200 + (normalizedLux * 600);
+
+    // 2. Add Orientation Shift (+/- 100Hz based on tilt)
+    // A low-vision user can find the horizon or ceiling by listening for the pitch peak.
+    final normalizedTilt = (_currentTilt.clamp(-90, 90) + 90) / 180; // 0.0 to 1.0
+    frequency += (normalizedTilt * 150) - 75; 
+
+    onToneUpdate!.call(frequency.clamp(100, 1200));
   }
 
   @override

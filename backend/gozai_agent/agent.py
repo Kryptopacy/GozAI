@@ -1,15 +1,17 @@
-import google.genai as genai
 from google.adk import Agent
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
+from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from mcp import StdioServerParameters
 
 from .tools import search_optometry_guidelines, send_sos_alert, get_medication_info, get_low_vision_statistics
 
 # Initialize Firebase MCP Toolset
 firebase_mcp_toolset = McpToolset(
-    connection_params=StdioServerParameters(
-        command="npx",
-        args=["-y", "firebase-mcp-server"],
+    connection_params=StdioConnectionParams(
+        server_params=StdioServerParameters(
+            command="npx",
+            args=["-y", "firebase-mcp-server"],
+        ),
     )
 )
 
@@ -18,7 +20,7 @@ firebase_mcp_toolset = McpToolset(
 # Deployed on Google Cloud Run
 root_agent = Agent(
     name="gozai_agent",
-    model="gemini-2.0-flash-exp",
+    model="gemini-3-flash-preview",
     description=(
         "GozAI backend agent for routing specialized intents. "
         "Handles optometry knowledge queries, caregiver SOS alerts, "

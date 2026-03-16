@@ -8,10 +8,10 @@ to populate the `gozai_rag_data` collection in your Firebase project.
 """
 
 import os
-import firebase_admin
-from firebase_admin import credentials, firestore
+import firebase_admin  # type: ignore
+from firebase_admin import credentials, firestore  # type: ignore
 
-from gozai_agent.rag_service import OPTOMETRY_DATA, MEDICATION_DATA, LOW_VISION_STATS
+from gozai_agent.rag_service import OPTOMETRY_DATA, MEDICATION_DATA, LOW_VISION_STATS  # type: ignore
 
 def seed_firestore():
     # Attempt to initialize Firebase Admin
@@ -30,7 +30,7 @@ def seed_firestore():
     collection_ref = db.collection("gozai_rag_data")
     print("Seeding GozAI Clinical RAG documents to Firestore...")
     
-    doc_count = 0
+    doc_count: int = 0
     
     # 1. Optometry Guidelines
     for key, data in OPTOMETRY_DATA.items():
@@ -41,7 +41,7 @@ def seed_firestore():
             "data": data,
             "version": "1.0"
         })
-        doc_count += 1
+        doc_count = doc_count + 1  # type: ignore
 
     # 2. Medication Data
     for key, data in MEDICATION_DATA.items():
@@ -52,7 +52,7 @@ def seed_firestore():
             "data": data,
             "version": "1.0"
         })
-        doc_count += 1
+        doc_count = doc_count + 1  # type: ignore
         
     # 3. Clinical Statistics
     for key, data in LOW_VISION_STATS.items():
@@ -63,7 +63,7 @@ def seed_firestore():
             "data": data,
             "version": "1.0"
         })
-        doc_count += 1
+        doc_count = doc_count + 1  # type: ignore
 
     try:
         batch.commit()

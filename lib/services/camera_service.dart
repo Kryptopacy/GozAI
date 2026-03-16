@@ -24,7 +24,6 @@ class CameraService extends ChangeNotifier {
 
   // Battery Saver / Motion Tracking
   StreamSubscription<AccelerometerEvent>? _accelSub;
-  double _lastAccelMagnitude = 9.8;
   DateTime _lastMotionTime = DateTime.now();
   bool _isBatterySaverActive = false;
 
@@ -198,8 +197,6 @@ class CameraService extends ChangeNotifier {
           debugPrint('CameraService: Resting -> 0.2 FPS (Battery Saver On)');
         }
       }
-      
-      _lastAccelMagnitude = magnitude;
     });
   }
 
@@ -216,16 +213,23 @@ class CameraService extends ChangeNotifier {
     if (wasStreaming) stopStreaming();
 
     await _controller?.dispose();
-    _controller = CameraController(
-      newCamera,
-      ResolutionPreset.medium,
-      enableAudio: false,
-      imageFormatGroup: kIsWeb ? ImageFormatGroup.unknown : ImageFormatGroup.jpeg,
-    );
-    await _controller!.initialize();
+    try {
+      _controller = CameraController(
+        newCamera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: kIsWeb ? ImageFormatGroup.unknown : ImageFormatGroup.jpeg,
+      );
+      await _controller!.initialize();
+      _initFailed = false;
+    } catch (e) {
+      debugPrint('CameraService: switchCamera failed: $e');
+      _initFailed = true;
+      _controller = null;
+    }
     notifyListeners();
 
-    if (wasStreaming) startStreaming();
+    if (wasStreaming && !_initFailed) startStreaming();
   }
 
   /// Toggle the camera LED flashlight on or off.

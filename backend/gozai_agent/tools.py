@@ -97,8 +97,8 @@ def search_optometry_guidelines(query: str) -> dict:
 
 
 def send_sos_alert(
-    message: str = "User needs assistance",
-    include_location: bool = True,
+    message: str,
+    include_location: bool,
 ) -> dict:
     """Send an SOS alert to the user's designated caregiver.
 

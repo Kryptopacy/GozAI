@@ -5,6 +5,8 @@ class AppConfig {
   static String get geminiApiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
   static String get firebaseProjectId =>
       dotenv.env['FIREBASE_PROJECT_ID'] ?? 'gozai-app';
+  static String get adkBackendUrl =>
+      dotenv.env['ADK_BACKEND_URL'] ?? 'http://localhost:8080';
 
   /// Gemini Multimodal Live API WebSocket endpoint.
   /// BidiGenerateContent WebSocket utilizes v1alpha for the native audio preview model.

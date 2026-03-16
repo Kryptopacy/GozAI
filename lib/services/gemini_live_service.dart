@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/app_config.dart';
 import '../core/system_prompt.dart';
+import 'adk_bridge_service.dart';
 
 /// Connection state for the Gemini Live session.
 enum GeminiConnectionState {
@@ -34,6 +34,8 @@ class GeminiLiveService extends ChangeNotifier {
   GozAIMode _currentMode = GozAIMode.scene;
   String _statusMessage = 'Tap to connect';
   bool _isModelSpeaking = false;
+  
+  final _adkBridge = AdkBridgeService();
   
   // Spatial Context Buffer — grounding Gemini with a running mental map.
   // Research basis: Seiple W. et al., TVST 14(1):3, 2025 (PMC11721483) —
@@ -64,7 +66,7 @@ class GeminiLiveService extends ChangeNotifier {
   void Function()? onInterrupted; // Callback for True Interruption (Barge-in)
   void Function(String hardwareType)? onRequestHardwareAccess;
   void Function(double x, double y)? onClickUiElement; // AI-synthesized UI taps
-  void Function(String message, String severity)? onSendSosAlert; // Caregiver SOS
+  void Function(String message, String severity, String target)? onSendSosAlert; // Caregiver/Doctor SOS
   void Function(String category, String fact)? onRememberFact; // Companion memory
   void Function(bool visible)? onToggleDebugCamera; // Voice-activated video feed
 
@@ -300,6 +302,48 @@ class GeminiLiveService extends ChangeNotifier {
                 }
               },
               {
+                'name': 'searchOptometryGuidelines',
+                'description': 'Search curated optometry guidelines for safe, verified medical information. Use this when a user asks a specific eye health question. Do not attempt to diagnose.',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'query': {
+                      'type': 'STRING',
+                      'description': 'The eye health question or condition to look up.',
+                    }
+                  },
+                  'required': ['query'],
+                }
+              },
+              {
+                'name': 'getMedicationInfo',
+                'description': 'Look up safe, verified medication information for common eye medications. Use this when a user asks about a specific eye drop or medication.',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'medication_name': {
+                      'type': 'STRING',
+                      'description': 'The name of the medication to look up (e.g., Timolol, Latanoprost).',
+                    }
+                  },
+                  'required': ['medication_name'],
+                }
+              },
+              {
+                'name': 'getLowVisionStatistics',
+                'description': 'Provide clinical statistics and research findings on low vision. Use this when asked about the prevalence of vision impairment, or gaps in assistive technology.',
+                'parameters': {
+                  'type': 'OBJECT',
+                  'properties': {
+                    'query': {
+                      'type': 'STRING',
+                      'description': 'The statistic topic to look up (e.g., global prevalence, tech abandonment).',
+                    }
+                  },
+                  'required': ['query'],
+                }
+              },
+              {
                 'name': 'sendSosAlert',
                 'description': 'Sends an emergency SOS alert to the user\'s designated caregiver via Firestore. Call this IMMEDIATELY if the user says they need help, are lost, feel unsafe, say "emergency", or if their speech sounds panicked or distressed. Do NOT ask for confirmation — act immediately.',
                 'parameters': {
@@ -314,8 +358,13 @@ class GeminiLiveService extends ChangeNotifier {
                       'description': 'Severity of the alert. Use "mild" for confusion/lost. Use "critical" for danger/injury.',
                       'enum': ['mild', 'critical'],
                     },
+                    'target': {
+                      'type': 'STRING',
+                      'description': 'Target of the SOS alert. Use "caregiver" for general assistance or "doctor" for medical emergencies.',
+                      'enum': ['caregiver', 'doctor'],
+                    },
                   },
-                  'required': ['message', 'severity'],
+                  'required': ['message', 'severity', 'target'],
                 }
               },
               {
@@ -456,7 +505,7 @@ class GeminiLiveService extends ChangeNotifier {
   }
 
   /// Handle incoming WebSocket messages from Gemini.
-  void _handleMessage(dynamic message) {
+  Future<void> _handleMessage(dynamic message) async {
     try {
       String messageStr;
       if (message is String) {
@@ -552,7 +601,7 @@ class GeminiLiveService extends ChangeNotifier {
 
       // Handle tool calls (for ADK backend integration)
       if (data.containsKey('toolCall')) {
-        _handleToolCall(data['toolCall'] as Map<String, dynamic>);
+        await _handleToolCall(data['toolCall'] as Map<String, dynamic>);
       }
     } catch (e) {
       debugPrint('GeminiLive message parse error: $e');
@@ -560,7 +609,7 @@ class GeminiLiveService extends ChangeNotifier {
   }
 
   /// Handle tool calls from Gemini (intent routing to Local App Actions or ADK backend).
-  void _handleToolCall(Map<String, dynamic> toolCall) {
+  Future<void> _handleToolCall(Map<String, dynamic> toolCall) async {
     if (!toolCall.containsKey('functionCalls')) return;
     final functionCalls = toolCall['functionCalls'] as List<dynamic>;
     
@@ -620,10 +669,11 @@ class GeminiLiveService extends ChangeNotifier {
           case 'sendSosAlert':
             final message = args['message'] as String? ?? 'User needs help.';
             final severity = args['severity'] as String? ?? 'mild';
-            onSendSosAlert?.call(message, severity);
+            final target = args['target'] as String? ?? 'caregiver';
+            onSendSosAlert?.call(message, severity, target);
             // Trigger urgent haptic pattern immediately so user feels the action
             onTriggerHaptic?.call('hazard');
-            debugPrint('GeminiLive: SOS alert fired — severity: $severity, message: $message');
+            debugPrint('GeminiLive: SOS alert fired — severity: $severity, target: $target, message: $message');
             break;
           case 'toggleFlashlight':
             final on = args['on'] as bool? ?? false;
@@ -645,6 +695,38 @@ class GeminiLiveService extends ChangeNotifier {
             final visible = args['visible'] as bool? ?? false;
             onToggleDebugCamera?.call(visible);
             break;
+            
+          // ADK Backend Delegated Tools
+          case 'searchOptometryGuidelines':
+            final query = args['query'] as String? ?? '';
+            final responseStr = await _adkBridge.consultBackendAgent('Search optometry guidelines for: $query');
+            functionResponses.add({
+              'id': callId,
+              'name': name,
+              'response': {'result': responseStr}
+            });
+            continue; // Skip the default append below
+            
+          case 'getMedicationInfo':
+            final medName = args['medication_name'] as String? ?? '';
+            final responseStr = await _adkBridge.consultBackendAgent('Get medication info for: $medName');
+            functionResponses.add({
+              'id': callId,
+              'name': name,
+              'response': {'result': responseStr}
+            });
+            continue;
+            
+          case 'getLowVisionStatistics':
+            final query = args['query'] as String? ?? '';
+            final responseStr = await _adkBridge.consultBackendAgent('Get low vision statistics about: $query');
+            functionResponses.add({
+              'id': callId,
+              'name': name,
+              'response': {'result': responseStr}
+            });
+            continue;
+            
           default:
             debugPrint('GeminiLive: Unknown tool call $name');
             success = false;

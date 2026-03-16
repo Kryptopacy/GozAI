@@ -26,13 +26,18 @@ echo ""
 # Step 1: Ensure gcloud and environment are configured
 echo "[1/5] Configuring gcloud project and environment..."
 if [[ -z "${GEMINI_API_KEY:-}" ]]; then
-    if [[ -f backend/.env ]]; then
-        export $(grep GEMINI_API_KEY backend/.env | xargs)
-    fi
+    # Try multiple common locations for secrets
+    for env_file in ".env" "backend/.env" "assets/app.env"; do
+        if [[ -f "$env_file" ]]; then
+            echo "Attempting to load secrets from $env_file..."
+            export $(grep GEMINI_API_KEY "$env_file" | xargs)
+            if [[ -n "${GEMINI_API_KEY:-}" ]]; then break; fi
+        fi
+    done
 fi
 
 if [[ -z "${GEMINI_API_KEY:-}" ]]; then
-    echo "ERROR: GEMINI_API_KEY is not set. Please set it as an environment variable or in backend/.env"
+    echo "ERROR: GEMINI_API_KEY is not set. Please set it as an environment variable or in one of: .env, backend/.env, assets/app.env"
     exit 1
 fi
 

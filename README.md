@@ -11,7 +11,7 @@
 
 **GozAI is an empathetic, voice-first companion that acts as the eyes and hands for people with low vision, bridging the gap between them and inaccessible digital/physical environments.**
 
-👉 **[Try the Live Web Demo Here](https://gozai.vercel.app)** 👈
+👉 **[Try the Live Web Demo Here](https://gozai-app.web.app)** 👈
 
 > **"GozAI isn't just an app that looks at things — it's an empathetic, continuously aware copilot that restores independence and psychological safety."**
 
@@ -121,13 +121,18 @@ GozAI is currently optimized as a Progressive Web App (PWA) to ensure maximum ac
 
 ---
 
-## 🚀 Quick Start (For Developers)
+## 🚀 Spin-up Instructions
+
+The following steps will guide you to set up and run the frontend and backend of GozAI securely.
 
 ### Prerequisites
 - Flutter SDK 3.41+
+- Python 3.12+ and `uv` (for backend)
+- Google Cloud SDK (`gcloud` CLI) installed and authenticated
 - Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
+- A Firebase Project (with Firestore enabled)
 
-### Setup
+### Local Setup (Frontend)
 ```bash
 # Clone the repository
 git clone https://github.com/Kryptopacy/GozAI.git
@@ -142,9 +147,26 @@ cp .env.example .env
 # FIREBASE_ANDROID_API_KEY=...
 # FIREBASE_IOS_API_KEY=...
 
-# Install dependencies and run
+# Install dependencies and run locally
 flutter pub get
 flutter run -d chrome
+```
+
+### Google Cloud Deployment (Backend)
+GozAI's autonomous safety logic is powered by the Google ADK and runs on Cloud Run, seamlessly connected to Firestore. The deployment is fully automated via Infrastructure-as-Code.
+
+```bash
+# Ensure gcloud is authenticated and set to your project
+gcloud auth login
+gcloud config set project [YOUR_PROJECT_ID]
+
+# Deploy the backend to Google Cloud Run utilizing the 1-click script
+./deploy.sh [YOUR_PROJECT_ID] [REGION]
+
+# This script will automatically:
+# 1. Enable Vertex AI and Cloud Run APIs
+# 2. Build the ADK Docker Container via Cloud Build
+# 3. Deploy a secure runtime instance of the GozAI engine
 ```
 
 ## 🧠 Technical Maturity & Design Decisions

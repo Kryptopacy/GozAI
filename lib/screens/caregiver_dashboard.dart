@@ -313,7 +313,7 @@ class CaregiverDashboard extends StatelessWidget {
                     }
                     return ListView.separated(
                       itemCount: docs.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      separatorBuilder: (context, _) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final data = docs[index].data() as Map<String, dynamic>;
                         final isHazard = data['type'] == 'hazard';

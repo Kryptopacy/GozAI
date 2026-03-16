@@ -82,7 +82,7 @@ class ScreenCaptureService extends ChangeNotifier {
 
     try {
       RenderRepaintBoundary boundary = globalKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      ui.Image image = await boundary.toImage(pixelRatio: 1.0);
+      ui.Image image = await boundary.toImage(pixelRatio: 0.8); // Slightly lower pixel ratio for speed
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       
       if (byteData != null) {

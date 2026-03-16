@@ -17,10 +17,11 @@ extension AudioWorkletExt on web.AudioWorklet {
   external JSPromise<JSAny?> addModule(String moduleUrl);
 }
 
-/// JS interop for AudioWorkletNode constructor (not yet in package:web).
+/// JS interop for AudioWorkletNode constructor.
 @JS('AudioWorkletNode')
-external web.AudioWorkletNode _createAudioWorkletNode(
-    web.AudioContext context, String name);
+extension type AudioWorkletNodeJS._(JSObject _) implements web.AudioWorkletNode {
+  external AudioWorkletNodeJS(web.AudioContext context, String name);
+}
 
 /// JS interop for MessagePort.onmessage setter.
 extension MessagePortExt on web.MessagePort {
@@ -76,7 +77,7 @@ class WebAudioBridge {
       _sourceNode = _audioContext!
           .createMediaStreamSource(_mediaStream as web.MediaStream);
       _workletNode =
-          _createAudioWorkletNode(_audioContext!, 'pcm-processor');
+          AudioWorkletNodeJS(_audioContext!, 'pcm-processor');
 
       // 5. Set onmessage callback on the worklet port — receives PCM16 ArrayBuffers
       _workletNode!.port.onmessage = _onWorkletMessage.toJS;

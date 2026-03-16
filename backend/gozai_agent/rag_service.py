@@ -1,11 +1,11 @@
 import os
-import numpy as np
-import google.genai as genai
+import numpy as np  # type: ignore
+import google.genai as genai  # type: ignore
 
 # Try to initialize Firebase for dynamic RAG fetching from Cloud Firestore
 try:
-    import firebase_admin
-    from firebase_admin import credentials, firestore as fb_firestore
+    import firebase_admin  # type: ignore
+    from firebase_admin import credentials, firestore as fb_firestore  # type: ignore
 
     if not firebase_admin._apps:
         # On Cloud Run: uses Application Default Credentials automatically.
@@ -241,6 +241,8 @@ class SemanticKnowledgeBase:
         if not self.client:
             return
             
+        assert self.client is not None
+            
         print("Building SemanticKnowledgeBase index...")
         
         # Overwrite with any live data from Firestore before embedding
@@ -251,7 +253,7 @@ class SemanticKnowledgeBase:
             # Embed a rich description so similarity is high for synonymous queries
             text_to_embed = f"Condition: {condition}. Effects: {info['answer']}"
             try:
-                response = self.client.models.embed_content(
+                response = self.client.models.embed_content(  # type: ignore
                     model=self.embedding_model,
                     contents=text_to_embed
                 )
@@ -263,7 +265,7 @@ class SemanticKnowledgeBase:
         for med, info in self.medication_data.items():
             text_to_embed = f"Medication: {med}. Use: {info['common_use']}. Type: {info['type']}."
             try:
-                response = self.client.models.embed_content(
+                response = self.client.models.embed_content(  # type: ignore
                     model=self.embedding_model,
                     contents=text_to_embed
                 )
@@ -275,7 +277,7 @@ class SemanticKnowledgeBase:
         for stat, info in self.stats_data.items():
             text_to_embed = f"Low Vision Statistic about {stat}: {info['statistic']} {info['context']}"
             try:
-                response = self.client.models.embed_content(
+                response = self.client.models.embed_content(  # type: ignore
                     model=self.embedding_model,
                     contents=text_to_embed
                 )
@@ -283,12 +285,15 @@ class SemanticKnowledgeBase:
             except Exception as e:
                 print(f"Error embedding stats data '{stat}': {e}")
 
-    def semantic_search(self, query: str, domain: str, threshold: float = 0.55):
+    def semantic_search(self, query: str, domain: str, threshold: float = 0.65):
         """
         Embeds the query and returns the top matching item if above the confidence threshold.
+        If it's a 'near miss' (0.55-0.65), it returns a low-confidence flag.
         """
         if not self.client:
             return {"found": False, "error": "GenAI Client not initialized."}
+            
+        assert self.client is not None
             
         # Get query embedding
         try:
@@ -324,14 +329,26 @@ class SemanticKnowledgeBase:
                 best_score = score
                 best_match = key
 
-        if best_match and best_score >= threshold:
-            print(f"RAG Hit: '{query}' -> '{best_match}' (Score: {best_score:.2f})")
-            return {
-                "found": True,
-                "key": best_match,
-                "score": best_score,
-                "data": source_data[best_match]
-            }
-        else:
-            print(f"RAG Miss: '{query}' highest match was '{best_match}' (Score: {best_score:.2f})")
-            return {"found": False}
+        if best_match:
+            if best_score >= threshold:
+                print(f"RAG Hit: '{query}' -> '{best_match}' (Score: {best_score:.2f})")
+                return {
+                    "found": True,
+                    "key": best_match,
+                    "score": best_score,
+                    "data": source_data[best_match]
+                }
+            elif best_score >= 0.55:
+                # Near miss: we found something but it's not perfect.
+                # Tell the agent to be cautious or ask for clarification.
+                print(f"RAG Near-Miss: '{query}' -> '{best_match}' (Score: {best_score:.2f})")
+                return {
+                    "found": True,
+                    "low_confidence": True,
+                    "key": best_match,
+                    "score": best_score,
+                    "data": source_data[best_match]
+                }
+
+        print(f"RAG Miss: '{query}' highest match was '{best_match}' (Score: {best_score:.2f})")
+        return {"found": False}

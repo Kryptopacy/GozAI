@@ -1,3 +1,4 @@
+// ignore_for_file: experimental_api, deprecated_member_use, deprecated_member_use_from_same_package
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -33,7 +34,6 @@ class AudioService extends ChangeNotifier {
   // Latency Confidence Ping (Sonar)
   Timer? _latencyTimer;
   Timer? _pingLoopTimer;
-  AudioPlayer? _pingPlayer;
 
   // Public getters
   bool get isRecording => _isRecording;
@@ -52,6 +52,8 @@ class AudioService extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('AudioService: Failed to start recording: $e');
+      _isRecording = false;
+      notifyListeners();
     }
   }
 
@@ -60,42 +62,58 @@ class AudioService extends ChangeNotifier {
     final hasPermission = await _recorder!.hasPermission();
     if (!hasPermission) {
       debugPrint('AudioService: Microphone permission denied');
+      _isRecording = false;
+      notifyListeners();
       return;
     }
 
-    final stream = await _recorder!.startStream(
-      const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        numChannels: 1,
-        sampleRate: AppConfig.audioInputSampleRate,
-      ),
-    );
+    try {
+      final stream = await _recorder!.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          numChannels: 1,
+          sampleRate: AppConfig.audioInputSampleRate,
+        ),
+      );
 
-    _recordSubscription = stream.listen((data) {
-      _audioChunkController.add(Uint8List.fromList(data));
-    });
+      _recordSubscription = stream.listen((data) {
+        _audioChunkController.add(Uint8List.fromList(data));
+      });
 
-    _isRecording = true;
-    _resetLatencyTimer();
-    notifyListeners();
-    debugPrint('AudioService: Recording started (16kHz PCM mono)');
+      _isRecording = true;
+      _resetLatencyTimer();
+      notifyListeners();
+      debugPrint('AudioService: Recording started (16kHz PCM mono)');
+    } catch (e) {
+      debugPrint('AudioService: Native stream start failed: $e');
+      _isRecording = false;
+      notifyListeners();
+    }
   }
 
   Future<void> _startWebRecording() async {
     // Use the web audio bridge (MediaRecorder API)
-    final started = await web_audio.WebAudioBridge.startRecording(
-      onChunk: (chunk) => _audioChunkController.add(chunk),
-    );
+    try {
+      final started = await web_audio.WebAudioBridge.startRecording(
+        onChunk: (chunk) => _audioChunkController.add(chunk),
+      );
 
-    if (!started) {
-      debugPrint('AudioService: Web mic not available (permission denied?)');
-      return;
+      if (!started) {
+        debugPrint('AudioService: Web mic not available (permission denied?)');
+        _isRecording = false;
+        notifyListeners();
+        return;
+      }
+
+      _isRecording = true;
+      _resetLatencyTimer();
+      notifyListeners();
+      debugPrint('AudioService: Recording started (web MediaRecorder)');
+    } catch (e) {
+      debugPrint('AudioService: Web recording failed: $e');
+      _isRecording = false;
+      notifyListeners();
     }
-
-    _isRecording = true;
-    _resetLatencyTimer();
-    notifyListeners();
-    debugPrint('AudioService: Recording started (web MediaRecorder)');
   }
 
   /// Stop recording audio.
@@ -284,6 +302,7 @@ class AudioService extends ChangeNotifier {
   }
 }
 
+// ignore: avoid_classes_with_only_static_members, directives_ordering
 class _PcmAudioSource extends StreamAudioSource {
   final Uint8List _wavData;
   _PcmAudioSource(this._wavData);

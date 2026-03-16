@@ -20,12 +20,14 @@ class SosService {
     required String userId,
     required String message,
     required String severity,
+    required String target,
   }) async {
     try {
       final alertData = {
         'userId': userId,
         'message': message,
         'severity': severity,
+        'target': target,
         'timestamp': FieldValue.serverTimestamp(),
         'resolved': false,
       };

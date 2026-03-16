@@ -86,7 +86,7 @@ class UserMemoryService extends ChangeNotifier {
   String? buildMemoryContext() {
     if (_facts.isEmpty) return null;
 
-    final buffer = StringBuffer('[SYSTEM - USER MEMORY (from previous sessions)]\\n');
+    final buffer = StringBuffer('[SYSTEM - USER MEMORY (from previous sessions)]\n');
     buffer.writeln('The following are things you have remembered about the user:');
 
     for (final fact in _facts) {

@@ -27,19 +27,6 @@ def resolve_gradle():
     with open(path, 'w') as f:
         f.write(resolved)
 
-def resolve_vercel():
-    path = 'vercel.json'
-    with open(path, 'r') as f:
-        content = f.read()
-    
-    resolved = re.sub(
-        r'<<<<<<< HEAD\n  "outputDirectory": "build/web",\n  "rewrites": \[\n    \{\n      "source": "/\(\.\*\)",\n      "destination": "/index\.html"\n=======\n  "rewrites": \[\n    \{\n      "source": "/\(\.\*\)",\n      "destination": "/build/web/\$1"\n    \},\n    \{\n      "source": "/",\n      "destination": "/build/web/index\.html"\n>>>>>>> recovered-features\n    \}',
-        '  "outputDirectory": "build/web",\n  "rewrites": [\n    {\n      "source": "/(.*)",\n      "destination": "/index.html"\n    }',
-        content
-    )
-    with open(path, 'w') as f:
-        f.write(resolved)
-
 def resolve_stub():
     path = 'lib/services/audio_service_stub.dart'
     content = """// This is the NATIVE stub for the WebAudioBridge.
@@ -84,7 +71,7 @@ def resolve_web():
     # Extract the HEAD block
     match = re.search(r'<<<<<<< HEAD\n(.*?)\n=======\n.*?\n>>>>>>> recovered-features\n', content, flags=re.DOTALL)
     if match:
-        head_content = match.group(1)
+        head_content = str(match.group(1))
         # Add playPing to it
         play_ping = '''
   /// Synthesizes a subtle, high-tech ping sound indicating the AI is thinking.
@@ -117,7 +104,6 @@ def resolve_web():
 
 resolve_gitignore()
 resolve_gradle()
-resolve_vercel()
 resolve_stub()
 resolve_web()
 print("Resolved easy conflicts.")

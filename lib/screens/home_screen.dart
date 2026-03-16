@@ -71,6 +71,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _lowBatteryWarned = false;
   late final PlatformMonitor _platformMonitor;
 
+  // Debug Camera Window State
+  Offset _debugCameraPosition = const Offset(20, 100);
+  bool _debugCameraMinimized = false;
+
   @override
   void initState() {
     super.initState();
@@ -171,11 +175,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     };
 
     // Wire SOS Caregiver Alert
-    geminiService.onSendSosAlert = (message, severity) {
+    geminiService.onSendSosAlert = (message, severity, target) {
       _sosService.sendAlert(
         userId: 'demo_patient_001', // Target the authorized patient
         message: message,
         severity: severity,
+        target: target,
       );
     };
 
@@ -254,6 +259,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         await audioSvc.startRecording();
       }
       
+      if (!mounted) return;
+
       // Send an updated hardware context to inform Gemini if the request succeeded
       setState(() {
          // UI will rebuild and chips will update
@@ -748,7 +755,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// Mode selector buttons utilizing Vercel's interaction and contrast guidelines.
+  /// Mode selector buttons utilizing high-contrast interaction guidelines.
   Widget _buildModeSelector() {
     return Consumer<GeminiLiveService>(
       builder: (context, gemini, _) {
@@ -890,7 +897,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (!mounted) return;
       final cameraService = context.read<CameraService>();
       final screenCapture = context.read<ScreenCaptureService>();
-      
+
       if (gemini.currentMode == GozAIMode.uiNav) {
         cameraService.stopStreaming();
         screenCapture.startStreaming();
@@ -900,29 +907,53 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
 
       // Build definitive hardware truth state
-      String hardwareContext = '[SYSTEM - HARDWARE CAPABILITIES UPDATE]\n';
-      if (audio.isRecording) {
-        hardwareContext += '- Microphone: ON (You can hear the user.)\n';
-      } else {
-        hardwareContext += '- Microphone: OFF (User CANNOT speak to you. They can only hear you. Remind them to check app mic permissions so you can converse.)\n';
-      }
-      
-      if (cameraService.isInitialized && !cameraService.initFailed) {
-         hardwareContext += '- Camera: ON (${cameraService.currentLensDirection?.name ?? 'unknown'} lens)\n';
-      } else {
-         hardwareContext += '- Camera: OFF/FAILED (You are completely BLIND. You CANNOT see the environment. Remind the user that enabling the camera provides critical safety and navigation assistance, but confirm you are still here to help verbally.)\n';
+      String hardwareContext = '';
+      bool micMissing = !audio.isRecording;
+      bool cameraMissing = !cameraService.isInitialized || cameraService.initFailed;
+
+      if (micMissing || cameraMissing) {
+        hardwareContext = '[SYSTEM - HARDWARE CAPABILITIES UPDATE]\n';
+        if (micMissing) {
+           hardwareContext += '- Microphone: OFF (Permission denied or hardware busy. Remind user supportively.)\n';
+        }
+        if (cameraMissing) {
+           hardwareContext += '- Camera: OFF (I am blind. Remind user that enabling camera helps with safety.)\n';
+        }
       }
 
-      // Load companion memory and build context
+      // Check for personalization: Do we know the user's name?
       final memoryService = context.read<UserMemoryService>();
       await memoryService.loadMemory('demo_patient_001');
-      final memoryContext = memoryService.buildMemoryContext();
-      if (memoryContext != null) {
-        hardwareContext += '\n$memoryContext';
+      
+      String? userName;
+      try {
+        final nameFact = memoryService.facts.firstWhere(
+          (f) => f['category'] == 'person' && (f['fact'] as String).toLowerCase().contains('name is'),
+        );
+        final factText = nameFact['fact'] as String;
+        // Extract name if pattern is "User's name is X" or similar
+        final parts = factText.split(' is ');
+        if (parts.length > 1) userName = parts.last.replaceAll('.', '').trim();
+      } catch (_) {
+        userName = null;
       }
 
-      // Start Gemini streaming session with injected hardware + memory state
-      await gemini.connect(hardwareContext: hardwareContext);
+      String launchContext;
+      if (userName == null) {
+        launchContext = '[SYSTEM - ONBOARDING]\nThis is a new user. Welcome them and ask for their name gracefully.';
+      } else {
+        launchContext = '[SYSTEM - AUTO-LAUNCH]\nWelcome $userName back to GozAI.';
+      }
+
+      // Build final context
+      final memoryContext = memoryService.buildMemoryContext();
+      String finalContext = '$launchContext\n\n$hardwareContext';
+      if (memoryContext != null) {
+        finalContext += '\n$memoryContext';
+      }
+
+      // Start Gemini streaming session
+      await gemini.connect(hardwareContext: finalContext);
 
       // Start the idle check-in timer
       _resetIdleTimer();
@@ -1098,65 +1129,142 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildDebugCameraOverlay() {
     return Visibility(
       visible: _showDebugCamera,
-      child: Positioned(
-        top: 100,
-        right: 20,
-        child: GestureDetector(
-          onPanUpdate: (details) {
-            // Future: Implement dragging if needed
-          },
-          child: Container(
-            width: 140,
-            height: 180,
-            decoration: BoxDecoration(
-              color: Colors.black,
-              border: Border.all(color: GozAITheme.primaryBlue.withValues(alpha: 0.5), width: 2),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black54,
-                  blurRadius: 10,
-                  spreadRadius: 2,
-                )
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Consumer<CameraService>(
-                builder: (context, camera, _) {
-                  if (!camera.isInitialized || camera.controller == null) {
-                    return const Center(child: Icon(Icons.videocam_off, color: Colors.white24, size: 40));
-                  }
-                  return Stack(
-                    fit: StackFit.expand,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Responsive sizing based on screen constraints
+          final double maxWidth = constraints.maxWidth * 0.45;
+          final double maxHeight = constraints.maxHeight * 0.4;
+          final double width = maxWidth.clamp(120.0, 240.0);
+          final double expandedHeight = maxHeight.clamp(160.0, 320.0);
+          final double minimizedHeight = 40.0; // Just the header
+
+          // Ensure window stays within screen bounds
+          double x = _debugCameraPosition.dx.clamp(0.0, constraints.maxWidth - width);
+          double y = _debugCameraPosition.dy.clamp(0.0, constraints.maxHeight - (_debugCameraMinimized ? minimizedHeight : expandedHeight));
+
+          return Positioned(
+            left: x,
+            top: y,
+            child: GestureDetector(
+              onPanUpdate: (details) {
+                setState(() {
+                  _debugCameraPosition += details.delta;
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                width: width,
+                height: _debugCameraMinimized ? minimizedHeight : expandedHeight,
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  border: Border.all(color: GozAITheme.primaryBlue.withValues(alpha: 0.5), width: 2),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    )
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Column(
                     children: [
-                      AspectRatio(
-                        aspectRatio: camera.controller!.value.aspectRatio,
-                        child: CameraPreview(camera.controller!),
-                      ),
-                      // Small indicator showing it's a Live Feed
-                      Positioned(
-                        top: 8,
-                        left: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withValues(alpha: 0.8),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'LIVE',
-                            style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                          ),
+                      // Header / Drag Handle
+                      Container(
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: GozAITheme.surfaceElevated,
+                          border: Border(bottom: BorderSide(color: GozAITheme.borderSubtle)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Goz View',
+                              style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    _debugCameraMinimized ? Icons.expand_more : Icons.expand_less,
+                                    size: 16,
+                                    color: Colors.white70,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    setState(() {
+                                      _debugCameraMinimized = !_debugCameraMinimized;
+                                    });
+                                    HapticService.tap();
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 16, color: Colors.white70),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    setState(() {
+                                      _showDebugCamera = false;
+                                    });
+                                    HapticService.tap();
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
+                      // Camera Preview (Only visible when expanded)
+                      if (!_debugCameraMinimized)
+                        Expanded(
+                          child: Consumer<CameraService>(
+                            builder: (context, camera, _) {
+                              if (!camera.isInitialized || camera.controller == null) {
+                                return const Center(child: Icon(Icons.videocam_off, color: Colors.white24, size: 40));
+                              }
+                              return Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  AspectRatio(
+                                    aspectRatio: camera.controller!.value.aspectRatio,
+                                    child: CameraPreview(camera.controller!),
+                                  ),
+                                  // Small indicator showing it's a Live Feed
+                                  Positioned(
+                                    top: 8,
+                                    left: 8,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withValues(alpha: 0.8),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'LIVE',
+                                        style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
                     ],
-                  );
-                },
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
