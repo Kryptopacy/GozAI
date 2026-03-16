@@ -1,38 +1,17 @@
-/**
- * GozAI Audio Worklet Processor
- * Converts float32 mic input to Int16 PCM chunks and posts them to the main thread.
- */
-class PcmCaptureProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    // Buffer up audio until we have a 4096-sample chunk (matches old ScriptProcessor size)
-    this._buffer = [];
-    this._chunkSize = 4096;
-  }
-
+class PcmProcessor extends AudioWorkletProcessor {
   process(inputs, outputs, parameters) {
     const input = inputs[0];
-    if (!input || input.length === 0) return true;
-
-    const channelData = input[0]; // mono
-    for (let i = 0; i < channelData.length; i++) {
-      this._buffer.push(channelData[i]);
-    }
-
-    // Once we have enough samples, convert and post
-    while (this._buffer.length >= this._chunkSize) {
-      const chunk = this._buffer.splice(0, this._chunkSize);
-      const pcm16 = new Int16Array(chunk.length);
-      for (let i = 0; i < chunk.length; i++) {
-        let s = Math.max(-1, Math.min(1, chunk[i]));
-        pcm16[i] = s * 32767;
+    if (input && input.length > 0) {
+      const channelData = input[0]; // Float32Array
+      if (channelData && channelData.length > 0) {
+        // We must slice() the buffer because the browser reuses the underlying memory array
+        // across process() calls, which would mutate data before the main thread reads it.
+        this.port.postMessage(channelData.slice());
       }
-      // Transfer the underlying buffer to avoid copy overhead
-      this.port.postMessage({ pcm16: pcm16.buffer }, [pcm16.buffer]);
     }
-
-    return true; // keep processor alive
+    // Return true to keep the processor alive indefinitely
+    return true; 
   }
 }
 
-registerProcessor('pcm-capture-processor', PcmCaptureProcessor);
+registerProcessor('pcm-processor', PcmProcessor);

@@ -170,7 +170,12 @@ class SemanticKnowledgeBase:
             
         # Try to initialize the client (uses GEMINI_API_KEY from env)
         try:
-            self.client = genai.Client()
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                print("CRITICAL: GEMINI_API_KEY environment variable is missing!")
+                self.client = None
+            else:
+                self.client = genai.Client(api_key=api_key)
         except Exception as e:
             print(f"Warning: Failed to initialize genai Client: {e}")
             self.client = None

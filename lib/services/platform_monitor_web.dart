@@ -65,7 +65,14 @@ class PlatformMonitorWeb implements PlatformMonitor {
       oscillator.start();
       oscillator.stop(ctx.currentTime + durationSeconds);
     } catch (e) {
-      debugPrint('PlatformMonitorWeb: playTone error: $e');
+      // Chrome/modern browsers block audio if no user interaction occurred yet.
+      // We catch this to prevent the "minified:OB" or similar crashes during late initialization.
+      if (e.toString().contains('NotAllowedError')) {
+        debugPrint('PlatformMonitorWeb: playTone blocked by auto-play policy.');
+      } else {
+        debugPrint('PlatformMonitorWeb: playTone error: $e');
+      }
+      _batteryCheckTimer?.cancel();
     }
   }
 

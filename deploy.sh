@@ -23,8 +23,19 @@ echo "Region:  ${REGION}"
 echo "Service: ${SERVICE_NAME}"
 echo ""
 
-# Step 1: Ensure gcloud is configured
-echo "[1/5] Configuring gcloud project..."
+# Step 1: Ensure gcloud and environment are configured
+echo "[1/5] Configuring gcloud project and environment..."
+if [[ -z "${GEMINI_API_KEY:-}" ]]; then
+    if [[ -f backend/.env ]]; then
+        export $(grep GEMINI_API_KEY backend/.env | xargs)
+    fi
+fi
+
+if [[ -z "${GEMINI_API_KEY:-}" ]]; then
+    echo "ERROR: GEMINI_API_KEY is not set. Please set it as an environment variable or in backend/.env"
+    exit 1
+fi
+
 gcloud config set project "${PROJECT_ID}"
 
 # Step 2: Enable required APIs
@@ -54,7 +65,7 @@ gcloud run deploy "${SERVICE_NAME}" \
     --cpu 1 \
     --min-instances 0 \
     --max-instances 10 \
-    --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID}" \
+    --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GEMINI_API_KEY=${GEMINI_API_KEY}" \
     --quiet
 
 # Step 5: Get service URL
