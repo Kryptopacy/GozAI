@@ -70,7 +70,7 @@ class WebAudioBridge {
 
       // 3. Load the AudioWorklet processor module
       await AudioWorkletExt(_audioContext!.audioWorklet)
-          .addModule('./audio_processor.js')
+          .addModule('/audio_processor.js')
           .toDart;
 
       // 4. Create Source Node and Worklet Node
@@ -88,8 +88,8 @@ class WebAudioBridge {
       debugPrint(
           'WebAudioBridge: AudioWorklet PCM16 recording started at ${_audioContext!.sampleRate} Hz');
       return true;
-    } catch (e) {
-      debugPrint('WebAudioBridge permission or setup error: $e');
+    } catch (e, stacktrace) {
+      debugPrint('WebAudioBridge permission or setup error: $e\\n$stacktrace');
       return false;
     }
   }
