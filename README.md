@@ -7,6 +7,8 @@
 
 [![GozAI Demo Video](https://img.shields.io/badge/▶_Watch_Demo_Video-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://github.com/Kryptopacy/GozAI)
 
+![alt text](image.png)
+
 **GozAI is an empathetic, voice-first companion that acts as the eyes and hands for people with low vision, bridging the gap between them and inaccessible digital/physical environments.**
 
 👉 **[Try the Live Web Demo Here](https://gozai.vercel.app)** 👈
