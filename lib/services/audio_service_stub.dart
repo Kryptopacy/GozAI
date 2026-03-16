@@ -15,11 +15,15 @@ class WebAudioBridge {
     // Not used on native
   }
 
-  static void playAudioChunk(Uint8List pcmData, int sampleRate) {
+  static void playAudioChunk(Uint8List chunk, int sampleRate) {
     // Not used on native
   }
 
   static void stopPlayback() {
+    // Not used on native
+  }
+
+  static void playPing() {
     // Not used on native
   }
 }

@@ -1,17 +1,29 @@
 import 'dart:async';
+import 'dart:ui';
 
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:flutter/foundation.dart';
+import '../services/platform_monitor.dart';
 import '../core/theme.dart';
 import '../services/gemini_live_service.dart';
 import '../services/camera_service.dart';
 import '../services/audio_service.dart';
 import '../services/haptic_service.dart';
+import '../services/ocr_service.dart';
 import '../services/screen_navigator_service.dart';
 import '../services/light_meter_service.dart';
+import '../services/screen_capture_service.dart';
+import '../services/clinical_telemetry_service.dart';
+import '../services/sos_service.dart';
+import '../services/barcode_service.dart';
+import '../services/product_lookup_service.dart';
+import '../services/user_memory_service.dart';
 
 /// The main GozAI interface.
 ///
@@ -31,8 +43,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
   StreamSubscription? _frameSubscription;
+  StreamSubscription? _screenCaptureSubscription;
   StreamSubscription? _audioInputSubscription;
   StreamSubscription? _audioOutputSubscription;
+  
+  // OCR grounding: run offline OCR every N frames to give Gemini text context
+  int _ocrFrameCounter = 0;
+  static const int _ocrFrameInterval = 3; // Run OCR on every 3rd frame in Read mode
+  
+  // Clinical Telemetry: track how long patients can read before fatigue
+  DateTime? _readingModeStartTime;
+
+  // New Services
+  final SosService _sosService = SosService();
+  final BarcodeService _barcodeService = BarcodeService();
+  final ProductLookupService _productLookupService = ProductLookupService();
+  bool _isScanningBarcode = false;
+
+  bool _showDebugCamera = false;
+
+  // Idle check-in: if the user is silent for too long, Goz gently checks in
+  Timer? _idleCheckInTimer;
+  static const Duration _idleCheckInDuration = Duration(seconds: 90);
+
+  // Edge cases: offline detection + battery monitoring
+  bool _wasOffline = false;
+  bool _lowBatteryWarned = false;
+  late final PlatformMonitor _platformMonitor;
 
   @override
   void initState() {
@@ -47,6 +84,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+    
+    _platformMonitor = PlatformMonitor();
 
     // Wire up services after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) => _initializeServices());
@@ -57,12 +96,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final geminiService = context.read<GeminiLiveService>();
     final audioService = context.read<AudioService>();
     final screenNav = context.read<ScreenNavigatorService>();
+    final screenCapture = context.read<ScreenCaptureService>();
 
     // Initialize camera
     await cameraService.initialize();
 
+    if (!mounted) return; // Prevent using context across async gaps
+
+    // Edge case: monitor connectivity and battery (using platform monitor)
+    _setupPlatformMonitoring();
+
     // Bind screen navigator to Gemini
     screenNav.bindGeminiService(geminiService);
+
+    // Wire light meter audio tone feedback.
+    // On web: plays a continuous oscillator that shifts frequency with light level.
+    // On native: the tone is described aloud by Gemini when the user asks.
+    final lightMeter = context.read<LightMeterService>();
+    lightMeter.onToneUpdate = (frequency) {
+      if (!kIsWeb) return; // Native: Gemini speech handles descriptions
+      // Use Web Audio API for a live pitch-shifting tone
+      _playLightMeterTone(frequency);
+    };
 
     // Bind Voice Command (Gemini Function Calling) intents
     geminiService.onSwitchCamera = () {
@@ -70,6 +125,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       HapticService.tap();
     };
     geminiService.onSwitchMode = (mode) {
+      // Telemetry: Log reading stamina if we are leaving reading mode
+      if (geminiService.currentMode == GozAIMode.reading && mode != GozAIMode.reading) {
+        if (_readingModeStartTime != null) {
+          final duration = DateTime.now().difference(_readingModeStartTime!);
+          context.read<ClinicalTelemetryService>().logReadingStamina(duration);
+          _readingModeStartTime = null;
+        }
+      } else if (mode == GozAIMode.reading) {
+        _readingModeStartTime = DateTime.now();
+      }
+
       geminiService.switchMode(mode);
       HapticService.modeSwitch();
     };
@@ -79,10 +145,191 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     geminiService.onDisconnect = () {
       _toggleSession(geminiService, audioService); // Safely turns off everything
     };
+    geminiService.onTriggerHaptic = (pattern) {
+      final telemetry = context.read<ClinicalTelemetryService>();
+      switch (pattern) {
+        case 'hazard':
+          telemetry.logHazardDetected(pattern);
+          HapticService.hazardWarning();
+          break;
+        case 'person':
+          HapticService.personDetected();
+          break;
+        case 'navigate':
+          HapticService.navigationCue();
+          break;
+        case 'safe':
+          HapticService.safePathConfirm();
+          break;
+        case 'environment_mapped':
+          HapticService.environmentKnown();
+          break;
+        case 'tap':
+          HapticService.tap();
+          break;
+      }
+    };
 
-    // Wire camera frames → Gemini
+    // Wire SOS Caregiver Alert
+    geminiService.onSendSosAlert = (message, severity) {
+      _sosService.sendAlert(
+        userId: 'demo_patient_001', // Target the authorized patient
+        message: message,
+        severity: severity,
+      );
+    };
+
+    // Wire AI-synthesized UI taps (for UI Navigator mode)
+    geminiService.onClickUiElement = (x, y) {
+      // Inject a pointer event at the given coordinates.
+      // In UI Nav mode, the screen is the camera — Gemini can click for the user.
+      debugPrint('GozAI: AI synthesizing tap at ($x, $y)');
+      
+      final size = MediaQuery.of(context).size;
+      // Coordinates from Gemini might be absolute (1080x1920 reference) or normalized (0-1).
+      // Our prompt asks for absolute on a 1080x1920 canvas, so we scale them to the actual device.
+      final dx = (x / 1080) * size.width;
+      final dy = (y / 1920) * size.height;
+      final position = Offset(dx.clamp(0.0, size.width), dy.clamp(0.0, size.height));
+
+      debugPrint('GozAI: Scaled tap to device logical pixels: $position');
+
+      // 1. Dispatch PointerDown
+      GestureBinding.instance.handlePointerEvent(
+        PointerDownEvent(
+          pointer: 999, // Arbitrary pointer ID for synthetic events
+          position: position,
+          kind: PointerDeviceKind.touch,
+        ),
+      );
+
+      // 2. Dispatch PointerUp immediately after
+      Future.delayed(const Duration(milliseconds: 50), () {
+        GestureBinding.instance.handlePointerEvent(
+          PointerUpEvent(
+            pointer: 999,
+            position: position,
+            kind: PointerDeviceKind.touch,
+          ),
+        );
+      });
+    };
+
+    // Wire spatial context updates (for cognitive mapping)
+    geminiService.onSpatialUpdate = (context_) {
+      debugPrint('GozAI: Spatial context updated: $context_');
+    };
+    
+    // Wire hardware flashlight control
+    geminiService.onToggleFlashlight = (on) {
+      final camera = context.read<CameraService>();
+      camera.toggleFlashlight(on);
+    };
+    
+    // True Interruption (Barge-in): instantly flush audio if Gemini detects user speech
+    geminiService.onInterrupted = () {
+      audioService.stopPlayback();
+    };
+
+    // Voice-activated video feed (Debug Camera)
+    geminiService.onToggleDebugCamera = (visible) {
+      debugPrint('GozAI: AI requested to toggle Debug Camera to: $visible');
+      setState(() {
+        _showDebugCamera = visible;
+      });
+      HapticService.alert();
+    };
+
+    // Wire hardware re-initialization requests
+    geminiService.onRequestHardwareAccess = (hardwareType) async {
+      debugPrint('GozAI: Model requested hardware access for: $hardwareType');
+      if (hardwareType == 'camera') {
+        final cameraService = context.read<CameraService>();
+        await cameraService.initialize();
+        if (cameraService.isInitialized && !cameraService.initFailed) {
+          cameraService.startStreaming();
+        }
+      } else if (hardwareType == 'mic') {
+        final audioSvc = context.read<AudioService>();
+        await audioSvc.startRecording();
+      }
+      
+      // Send an updated hardware context to inform Gemini if the request succeeded
+      setState(() {
+         // UI will rebuild and chips will update
+      });
+      
+      // Inject the current state back
+      String hardwareContext = '[SYSTEM - HARDWARE CAPABILITIES UPDATE]\\n';
+      if (context.read<AudioService>().isRecording) {
+        hardwareContext += '- Microphone: ON\\n';
+      } else {
+        hardwareContext += '- Microphone: OFF (Failed to start)\\n';
+      }
+      
+      final cam = context.read<CameraService>();
+      if (cam.isInitialized && !cam.initFailed) {
+         hardwareContext += '- Camera: ON\\n';
+      } else {
+         hardwareContext += '- Camera: OFF/FAILED\\n';
+      }
+      geminiService.sendText(hardwareContext);
+    };
+
+    // Wire companion memory: Gemini can call rememberFact to persist user info
+    geminiService.onRememberFact = (category, fact) {
+      final memoryService = context.read<UserMemoryService>();
+      memoryService.storeFact(
+        userId: 'demo_patient_001',
+        category: category,
+        fact: fact,
+      );
+    };
+
+    // Wire camera frames → Gemini (with OCR grounding in Read mode)
     _frameSubscription = cameraService.frameStream.listen((frame) {
+      if (geminiService.currentMode == GozAIMode.uiNav) return; // UI nav uses screen frames
+      
       geminiService.sendVideoFrame(frame);
+      // In Read mode, run offline OCR every N frames and send extracted text
+      // as grounding context so Gemini is anchored to actual on-screen characters.
+      if (geminiService.currentMode == GozAIMode.reading) {
+        // 1. Try barcode scan first for Universal Product Scanner pipeline
+        if (!_isScanningBarcode) {
+          _isScanningBarcode = true;
+          _barcodeService.scanFromBytes(frame).then((barcode) async {
+            if (barcode != null) {
+              final product = await _productLookupService.lookup(barcode);
+              if (product != null) {
+                // Send injected context to Gemini
+                geminiService.sendText(product.toGroundingString());
+                HapticService.tap();
+              }
+            }
+            _isScanningBarcode = false;
+          });
+        }
+
+        // 2. Run OCR Grounding every N frames
+        _ocrFrameCounter++;
+        if (_ocrFrameCounter >= _ocrFrameInterval) {
+          _ocrFrameCounter = 0;
+          _runOcrGrounding(frame, geminiService);
+        }
+      } else {
+        _ocrFrameCounter = 0; // Reset when not in reading mode
+      }
+    });
+
+    // Reset idle timer whenever audio is being sent (user is talking)
+    _audioInputSubscription = audioService.audioChunkStream.listen((_) {
+      _resetIdleTimer();
+    });
+
+    // Wire internal UI frames → Gemini (For UI Navigator mode)
+    _screenCaptureSubscription = screenCapture.frameStream.listen((frame) {
+      if (geminiService.currentMode != GozAIMode.uiNav) return;
+      geminiService.sendVideoFrame(frame); // Gemini sees the UI as the camera
     });
 
     // Wire audio input → Gemini
@@ -95,15 +342,92 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         geminiService.audioOutputStream.listen((audioData) {
       audioService.queueAudioResponse(audioData);
     });
+
+    // Zero-UI Launch: Automatically start the session and open the mic upon app open
+    if (!geminiService.isConnected && !audioService.isRecording) {
+      debugPrint('GozAI: Auto-starting session for Zero-UI launch.');
+      _toggleSession(geminiService, audioService);
+    }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     _frameSubscription?.cancel();
+    _screenCaptureSubscription?.cancel();
     _audioInputSubscription?.cancel();
     _audioOutputSubscription?.cancel();
+    _idleCheckInTimer?.cancel();
+    _platformMonitor.dispose();
     super.dispose();
+  }
+
+  /// Resets the idle check-in timer. Called every time audio is sent.
+  void _resetIdleTimer() {
+    _idleCheckInTimer?.cancel();
+    _idleCheckInTimer = Timer(_idleCheckInDuration, _onIdleCheckIn);
+  }
+
+  /// Fired when the user has been silent for [_idleCheckInDuration].
+  void _onIdleCheckIn() {
+    if (!mounted) return;
+    final gemini = context.read<GeminiLiveService>();
+    if (!gemini.isConnected) return;
+    gemini.sendText(
+      '[SYSTEM - IDLE CHECK-IN]: The user has been silent for a while. '
+      'Gently check in with a single short sentence. Do NOT be annoying — '
+      'just a brief "Still here if you need me" or similar. '
+      'If they do not respond after this, stay completely silent.'
+    );
+    debugPrint('GozAI: Idle check-in triggered after ${_idleCheckInDuration.inSeconds}s of silence.');
+  }
+
+  void _setupPlatformMonitoring() {
+    _platformMonitor.setupConnectivityMonitoring(
+      onOffline: () {
+        _wasOffline = true;
+        if (!mounted) return;
+        final gemini = context.read<GeminiLiveService>();
+        if (gemini.isConnected) {
+          gemini.sendText(
+            '[SYSTEM - CONNECTIVITY LOST]: The device has lost internet connection. '
+            'Inform the user briefly that you may disconnect, but will reconnect when internet is back.'
+          );
+        }
+      },
+      onOnline: () {
+        if (!_wasOffline) return;
+        _wasOffline = false;
+        if (!mounted) return;
+        final gemini = context.read<GeminiLiveService>();
+        if (gemini.isConnected) {
+          gemini.sendText(
+            '[SYSTEM - CONNECTIVITY RESTORED]: Internet connection is back. '
+            'Briefly reassure the user that you are back online.'
+          );
+        }
+      },
+    );
+
+    _platformMonitor.setupBatteryMonitoring(
+      onLowBattery: (level, charging) {
+        if (level <= 0.15 && !charging && !_lowBatteryWarned) {
+          _lowBatteryWarned = true;
+          if (!mounted) return;
+          final gemini = context.read<GeminiLiveService>();
+          if (gemini.isConnected) {
+            final percent = (level * 100).round();
+            gemini.sendText(
+              '[SYSTEM - LOW BATTERY]: Device battery is at $percent%. '
+              'Briefly warn the user that their battery is low and suggest charging '
+              'to keep GozAI available for their safety.'
+            );
+          }
+        } else if (level > 0.20) {
+          _lowBatteryWarned = false; // Reset if battery recovers
+        }
+      },
+    );
   }
 
   /// Handle physical volume button presses for hands-free control.
@@ -133,18 +457,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       autofocus: true,
       child: Scaffold(
         backgroundColor: GozAITheme.backgroundBlack,
+        extendBodyBehindAppBar: true, 
         appBar: _buildPremiumAppBar(context),
-        body: SafeArea(
-          child: Column(
-            children: [
-              _buildStatusBar(),
-              const Spacer(flex: 1),
-              _buildCentralButton(),
-              const Spacer(flex: 2),
-              _buildModeSelector(),
-              const SizedBox(height: 24),
-            ],
-          ),
+        body: Stack(
+          children: [
+            // Immersive ambient background layer
+            _buildAmbientGlowBackground(),
+            
+            // Debug Camera Overlay (Floating Window)
+            _buildDebugCameraOverlay(),
+            
+            // UI Layer
+            SafeArea(
+              child: Column(
+                children: [
+                  _buildStatusBar(),
+                  const SizedBox(height: 8),
+                  _buildHardwareStatusIndicators(),
+                  const Spacer(flex: 1),
+                  _buildCentralButton(),
+                  const Spacer(flex: 2),
+                  _buildModeSelector(),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -153,14 +491,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   /// Premium Navigation Header for routing to specialized Dashboards.
   PreferredSizeWidget _buildPremiumAppBar(BuildContext context) {
     return AppBar(
+      backgroundColor: Colors.transparent, // Let background shine under
+      elevation: 0,
       title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.remove_red_eye_outlined, color: GozAITheme.primaryBlue, size: 24),
+          Image.asset(
+            'assets/logos/gozai_premium_lens_1772805910787.png',
+            height: 32,
+            semanticLabel: 'GozAI Premium Lens Logo',
+          ),
           const SizedBox(width: 8),
           Text(
             'GozAI',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
           ),
         ],
       ),
@@ -186,62 +530,145 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       builder: (context, gemini, _) {
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: GozAITheme.surfaceElevated,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: GozAITheme.borderSubtle, width: 1),
-          ),
-          child: Semantics(
-            label: 'Status: ${gemini.statusMessage}. Mode: ${_modeName(gemini.currentMode)}',
-            child: Row(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _connectionColor(gemini.connectionState),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _connectionColor(gemini.connectionState).withValues(alpha: 0.4),
-                        blurRadius: 12,
-                        spreadRadius: 2,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: GozAITheme.surfacePure,
+                  border: Border.all(color: GozAITheme.borderSubtle, width: 1.5),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Semantics(
+                  label: 'Status: ${gemini.statusMessage}. Mode: ${_modeName(gemini.currentMode)}',
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _connectionColor(gemini.connectionState),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _connectionColor(gemini.connectionState).withValues(alpha: 0.6),
+                              blurRadius: 16,
+                              spreadRadius: 3,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          gemini.statusMessage,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: GozAITheme.primaryBlue.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: GozAITheme.primaryBlue.withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          _modeName(gemini.currentMode),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: GozAITheme.accentCyan,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    gemini.statusMessage,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: GozAITheme.primaryBlue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: GozAITheme.primaryBlue.withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    _modeName(gemini.currentMode),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: GozAITheme.accentCyan,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Inter',
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         );
       },
+    );
+  }
+
+  /// Row of chips showing realtime Mic and Camera hardware states.
+  Widget _buildHardwareStatusIndicators() {
+    return Consumer3<GeminiLiveService, AudioService, CameraService>(
+      builder: (context, gemini, audio, camera, _) {
+        final isMicOn = audio.isRecording;
+        final isCameraOn = camera.isInitialized && !camera.initFailed;
+        String cameraText = 'Camera: Off';
+        if (isCameraOn) {
+          final dir = camera.currentLensDirection;
+          if (dir == CameraLensDirection.front) {
+            cameraText = 'Camera: Front';
+          } else if (dir == CameraLensDirection.back) {
+            cameraText = 'Camera: Rear';
+          } else {
+            cameraText = 'Camera: On';
+          }
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildStatusChip(
+                icon: isMicOn ? Icons.mic : Icons.mic_off,
+                label: isMicOn ? 'Mic: On' : 'Mic: Off',
+                isActive: isMicOn,
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onLongPress: () {
+                  setState(() {
+                    _showDebugCamera = !_showDebugCamera;
+                  });
+                  HapticService.alert();
+                  debugPrint('Debug Camera toggled: $_showDebugCamera');
+                },
+                child: _buildStatusChip(
+                  icon: isCameraOn ? Icons.videocam : Icons.videocam_off,
+                  label: cameraText,
+                  isActive: isCameraOn,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusChip({required IconData icon, required String label, required bool isActive}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isActive ? GozAITheme.success.withValues(alpha: 0.1) : GozAITheme.hazardAlert.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isActive ? GozAITheme.success.withValues(alpha: 0.3) : GozAITheme.hazardAlert.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: isActive ? GozAITheme.success : GozAITheme.hazardAlert),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
     );
   }
 
@@ -327,16 +754,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       builder: (context, gemini, _) {
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Row(
-            children: [
-              _buildModeButton(gemini, GozAIMode.scene, Icons.wallpaper, 'Scene'),
-              const SizedBox(width: 8),
-              _buildModeButton(gemini, GozAIMode.reading, Icons.menu_book, 'Read'),
-              const SizedBox(width: 8),
-              _buildModeButton(gemini, GozAIMode.uiNav, Icons.touch_app, 'Screen'),
-              const SizedBox(width: 8),
-              _buildModeButton(gemini, GozAIMode.lightMeter, Icons.light_mode, 'Light'),
-            ],
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: GozAITheme.surfacePure.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: GozAITheme.borderSubtle, width: 1),
+                ),
+                child: Row(
+                  children: [
+                    _buildModeButton(gemini, GozAIMode.scene, Icons.wallpaper, 'Scene'),
+                    const SizedBox(width: 4),
+                    _buildModeButton(gemini, GozAIMode.reading, Icons.menu_book, 'Read'),
+                    const SizedBox(width: 4),
+                    _buildModeButton(gemini, GozAIMode.uiNav, Icons.touch_app, 'Screen'),
+                    const SizedBox(width: 4),
+                    _buildModeButton(gemini, GozAIMode.lightMeter, Icons.light_mode, 'Light'),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       },
@@ -357,20 +798,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         label: '$label mode${isActive ? ", currently active" : ""}',
         child: InkWell(
           onTap: () {
+            // Log spatial wandering if modes are cycled too fast
+            context.read<ClinicalTelemetryService>().logSpatialDisorientation();
+
+            // Telemetry: Log reading stamina if leaving
+            if (gemini.currentMode == GozAIMode.reading && mode != GozAIMode.reading) {
+              if (_readingModeStartTime != null) {
+                final duration = DateTime.now().difference(_readingModeStartTime!);
+                context.read<ClinicalTelemetryService>().logReadingStamina(duration);
+                _readingModeStartTime = null;
+              }
+            } else if (mode == GozAIMode.reading && gemini.currentMode != GozAIMode.reading) {
+              _readingModeStartTime = DateTime.now();
+            }
+
             gemini.switchMode(mode);
             HapticService.modeSwitch();
           },
           borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
-              color: isActive ? GozAITheme.primaryBlue.withValues(alpha: 0.15) : GozAITheme.surfacePure,
-              borderRadius: BorderRadius.circular(12),
+              color: isActive ? GozAITheme.primaryBlue.withValues(alpha: 0.25) : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isActive ? GozAITheme.primaryBlue : GozAITheme.borderSubtle,
+                color: isActive ? GozAITheme.accentCyan.withValues(alpha: 0.5) : Colors.transparent,
                 width: 1,
               ),
+              boxShadow: isActive ? [
+                BoxShadow(
+                  color: GozAITheme.primaryBlue.withValues(alpha: 0.3),
+                  blurRadius: 16,
+                  spreadRadius: -2,
+                )
+              ] : null,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -378,16 +841,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 Icon(
                   icon,
                   size: 26,
-                  color: isActive ? GozAITheme.accentCyan : GozAITheme.textSecondary,
+                  color: isActive ? Colors.white : GozAITheme.textSecondary,
                 ),
                 const SizedBox(height: 6),
                 Text(
                   label,
                   style: TextStyle(
                     fontSize: 13,
-                    fontFamily: 'Inter',
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                    color: isActive ? GozAITheme.textPrimary : GozAITheme.textSecondary,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    color: isActive ? Colors.white : GozAITheme.textSecondary,
                   ),
                 ),
               ],
@@ -407,7 +869,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       await audio.stopRecording();
       if (!mounted) return;
       final cameraService = context.read<CameraService>();
+      final screenCapture = context.read<ScreenCaptureService>();
       cameraService.stopStreaming();
+      screenCapture.stopStreaming();
       // Stop light meter if active
       context.read<LightMeterService>().stop();
       await gemini.disconnect();
@@ -421,22 +885,47 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         return;
       }
 
-      // Start Gemini streaming session
-      await gemini.connect();
+      // Start hardware first to verify permissions/state
       await audio.startRecording();
       if (!mounted) return;
       final cameraService = context.read<CameraService>();
-      cameraService.startStreaming();
+      final screenCapture = context.read<ScreenCaptureService>();
       
-      if (cameraService.initFailed || !cameraService.isInitialized) {
-        // Force the model into strict blind mode since the camera threw an exception (e.g. privacy shutter)
-        gemini.sendText(
-          'System Notification: The user camera is hardware-disabled or blocked by a privacy shutter. '
-          'You are completely blind and CANNOT see the environment. '
-          'Do NOT attempt to describe the user\'s surroundings or assume they are safe. '
-          'Acknowledge this limitation immediately.'
-        );
+      if (gemini.currentMode == GozAIMode.uiNav) {
+        cameraService.stopStreaming();
+        screenCapture.startStreaming();
+      } else {
+        screenCapture.stopStreaming();
+        cameraService.startStreaming();
       }
+
+      // Build definitive hardware truth state
+      String hardwareContext = '[SYSTEM - HARDWARE CAPABILITIES UPDATE]\n';
+      if (audio.isRecording) {
+        hardwareContext += '- Microphone: ON (You can hear the user.)\n';
+      } else {
+        hardwareContext += '- Microphone: OFF (User CANNOT speak to you. They can only hear you. Remind them to check app mic permissions so you can converse.)\n';
+      }
+      
+      if (cameraService.isInitialized && !cameraService.initFailed) {
+         hardwareContext += '- Camera: ON (${cameraService.currentLensDirection?.name ?? 'unknown'} lens)\n';
+      } else {
+         hardwareContext += '- Camera: OFF/FAILED (You are completely BLIND. You CANNOT see the environment. Remind the user that enabling the camera provides critical safety and navigation assistance, but confirm you are still here to help verbally.)\n';
+      }
+
+      // Load companion memory and build context
+      final memoryService = context.read<UserMemoryService>();
+      await memoryService.loadMemory('demo_patient_001');
+      final memoryContext = memoryService.buildMemoryContext();
+      if (memoryContext != null) {
+        hardwareContext += '\n$memoryContext';
+      }
+
+      // Start Gemini streaming session with injected hardware + memory state
+      await gemini.connect(hardwareContext: hardwareContext);
+
+      // Start the idle check-in timer
+      _resetIdleTimer();
 
       HapticService.connected();
     }
@@ -453,6 +942,49 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       HapticService.tap();
     }
   }
+
+  /// OCR Grounding for Read mode.
+  ///
+  /// Runs ML Kit offline OCR on a camera frame and sends the extracted
+  /// text to Gemini as grounding context. This gives the Live API model a
+  /// character-accurate anchor — preventing hallucination on text like
+  /// medication dosages, expiry dates, and nutrition labels.
+  Future<void> _runOcrGrounding(
+    Uint8List frame,
+    GeminiLiveService gemini,
+  ) async {
+    if (!gemini.isConnected || !mounted) return;
+    final ocrService = context.read<OcrService>();
+    final telemetry = context.read<ClinicalTelemetryService>();
+    final lightMeter = context.read<LightMeterService>();
+    
+    try {
+      final result = await ocrService.recognizeFromBytes(frame);
+      if (result.isNotEmpty) {
+        // Clinical Telemetry: Track contrast demand (how much light they needed)
+        telemetry.logOcrAssist(lightMeter.currentLux, result.fullText.length);
+
+        // Send OCR text as a silent system grounding prefix
+        final isMed = ocrService.isMedicationLabel(result);
+        final isNutr = ocrService.isNutritionLabel(result);
+        final groundingString = result.buildGroundingString(
+          isMedication: isMed, 
+          isNutrition: isNutr,
+        );
+        
+        gemini.sendText(
+          '[OCR Context — do not read this aloud unless the user asks]: '
+          'The following structured text was detected on camera with offline OCR. '
+          'Use the bounding boxes to infer layout like columns or tables:\\n'
+          '$groundingString',
+        );
+        debugPrint('OCR grounding sent: ${result.fullText.length} chars, isMed: $isMed, isNutr: $isNutr');
+      }
+    } catch (e) {
+      debugPrint('OCR grounding error: $e');
+    }
+  }
+
 
   // --- Helpers ---
 
@@ -481,4 +1013,152 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         return GozAITheme.textSecondary;
     }
   }
+
+  /// Plays a brief pitched tone via Web Audio API for the light meter.
+  ///
+  /// Each 200ms tick from LightMeterService fires this, producing a
+  /// pitch-shifted tone (200–800 Hz). Lower Hz = darker, higher Hz = brighter.
+  /// Short duration (180ms) prevents tones from colliding into a continuous drone.
+  void _playLightMeterTone(double frequency) {
+    _platformMonitor.playTone(frequency, 0.18);
+  }
+
+  /// Immersive ambient glowing orbs that react to Gemini state
+  Widget _buildAmbientGlowBackground() {
+    return Consumer2<GeminiLiveService, AudioService>(
+      builder: (context, gemini, audio, _) {
+        final isActive = gemini.isConnected && audio.isRecording;
+        final isSpeaking = gemini.isModelSpeaking;
+
+        Color mainGlow;
+        if (isSpeaking) {
+          mainGlow = GozAITheme.speakingPulse;
+        } else if (isActive) {
+          mainGlow = GozAITheme.listeningPulse;
+        } else {
+          mainGlow = GozAITheme.primaryBlue;
+        }
+
+        return Stack(
+          children: [
+            // Top Right Orb
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 1500),
+              curve: Curves.easeInOutSine,
+              top: isActive ? 20 : -100,
+              right: isActive ? -20 : -150,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 1500),
+                width: 350,
+                height: 350,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: mainGlow.withValues(alpha: 0.15),
+                  boxShadow: [
+                    BoxShadow(
+                      color: mainGlow.withValues(alpha: 0.2),
+                      blurRadius: 120,
+                      spreadRadius: 40,
+                    )
+                  ],
+                ),
+              ),
+            ),
+            // Bottom Left Orb
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 2000),
+              curve: Curves.easeInOutSine,
+              bottom: isSpeaking ? 0 : -80,
+              left: isSpeaking ? -30 : -100,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 2000),
+                width: 250,
+                height: 250,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: GozAITheme.accentCyan.withValues(alpha: isSpeaking ? 0.2 : 0.05),
+                  boxShadow: [
+                    BoxShadow(
+                      color: GozAITheme.accentCyan.withValues(alpha: isSpeaking ? 0.2 : 0.05),
+                      blurRadius: 100,
+                      spreadRadius: 30,
+                    )
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Floating Debug Camera window for absolute transparency of what Goz sees.
+  /// Toggled by long-pressing the Camera status chip.
+  Widget _buildDebugCameraOverlay() {
+    return Visibility(
+      visible: _showDebugCamera,
+      child: Positioned(
+        top: 100,
+        right: 20,
+        child: GestureDetector(
+          onPanUpdate: (details) {
+            // Future: Implement dragging if needed
+          },
+          child: Container(
+            width: 140,
+            height: 180,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              border: Border.all(color: GozAITheme.primaryBlue.withValues(alpha: 0.5), width: 2),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black54,
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                )
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Consumer<CameraService>(
+                builder: (context, camera, _) {
+                  if (!camera.isInitialized || camera.controller == null) {
+                    return const Center(child: Icon(Icons.videocam_off, color: Colors.white24, size: 40));
+                  }
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      AspectRatio(
+                        aspectRatio: camera.controller!.value.aspectRatio,
+                        child: CameraPreview(camera.controller!),
+                      ),
+                      // Small indicator showing it's a Live Feed
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.8),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'LIVE',
+                            style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
+

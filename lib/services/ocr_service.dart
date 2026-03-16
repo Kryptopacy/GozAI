@@ -114,7 +114,24 @@ class OcrService extends ChangeNotifier {
     return matches >= 2; // At least 2 medication-related keywords
   }
 
+  /// Check if recognized text looks like a prescription label (RX drug label).
+  ///
+  /// Prescriptions contain regulatory markers: NDC number, DEA number,
+  /// "Rx only", refill count, prescribing doctor. When this is detected,
+  /// Gemini is instructed to read the drug name letter-by-letter for safety.
+  bool isPrescriptionLabel(OcrResult result) {
+    final keywords = [
+      'rx only', 'rx', 'ndc', 'dea', 'dispense', 'refill',
+      'prescriber', 'prescribed by', 'quantity', 'days supply',
+      'prior auth', 'sig:', 'take as directed',
+    ];
+    final textLower = result.fullText.toLowerCase();
+    final matches = keywords.where((kw) => textLower.contains(kw)).length;
+    return matches >= 2;
+  }
+
   /// Check if recognized text looks like a nutrition/food label.
+
   bool isNutritionLabel(OcrResult result) {
     final keywords = [
       'calories', 'fat', 'protein', 'carbohydrate', 'sodium',
@@ -143,6 +160,32 @@ class OcrResult {
 
   bool get isEmpty => fullText.isEmpty;
   bool get isNotEmpty => fullText.isNotEmpty;
+
+  /// Formats the OCR result into a structured grounding prompt for Gemini.
+  /// Includes bounding box coordinates for spatial layout awareness (e.g. columns).
+  String buildGroundingString({bool isMedication = false, bool isNutrition = false}) {
+    if (isEmpty) return '';
+    final buffer = StringBuffer();
+    if (isMedication) buffer.writeln('[MEDICATION LABEL]');
+    if (isNutrition) buffer.writeln('[NUTRITION LABEL]');
+
+    buffer.writeln('--- DOCUMENT LAYOUT START ---');
+    for (final block in blocks) {
+      final b = block.boundingBox;
+      final cleanText = block.text.replaceAll('\n', ' ');
+      if (b != null) {
+        final x = b.left.toInt();
+        final y = b.top.toInt();
+        final w = b.width.toInt();
+        final h = b.height.toInt();
+        buffer.writeln('(x:$x, y:$y, w:$w, h:$h): $cleanText');
+      } else {
+        buffer.writeln(cleanText);
+      }
+    }
+    buffer.writeln('--- DOCUMENT LAYOUT END ---');
+    return buffer.toString();
+  }
 }
 
 /// A block of recognized text with spatial information.

@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'dart:math';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 import '../core/app_config.dart';
 
@@ -19,6 +22,12 @@ class CameraService extends ChangeNotifier {
   Timer? _frameTimer;
   double _fps = AppConfig.cameraFps;
 
+  // Battery Saver / Motion Tracking
+  StreamSubscription<AccelerometerEvent>? _accelSub;
+  double _lastAccelMagnitude = 9.8;
+  DateTime _lastMotionTime = DateTime.now();
+  bool _isBatterySaverActive = false;
+
   // Stream controller for JPEG frames
   final StreamController<Uint8List> _frameController =
       StreamController<Uint8List>.broadcast();
@@ -29,6 +38,7 @@ class CameraService extends ChangeNotifier {
   bool get initFailed => _initFailed;
   CameraController? get controller => _controller;
   Stream<Uint8List> get frameStream => _frameController.stream;
+  CameraLensDirection? get currentLensDirection => _controller?.description.lensDirection;
 
   /// Initialize the camera (prefer rear camera).
   Future<void> initialize() async {
@@ -43,34 +53,40 @@ class CameraService extends ChangeNotifier {
 
       // On mobile we prefer the rear camera for scene analysis.
       // On web/PC, webcams often report as external, front, or unknown.
-      CameraDescription camera;
-      if (kIsWeb) {
-        // On web just take the first available (usually the default webcam)
-        camera = _cameras.first;
-      } else {
-        camera = _cameras.firstWhere(
-          (c) => c.lensDirection == CameraLensDirection.back,
-          orElse: () => _cameras.first,
-        );
-      }
-
-      // ImageFormatGroup.jpeg is NOT supported on Flutter web and causes
-      // a CameraException(cameraNotReadable) hardware error. Omit it on web.
-      // Furthermore, requesting ResolutionPreset.low or medium on Web often causes
-      // cameraNotReadable because of rigid hardware constraints. Max allows negotiation.
-      _controller = CameraController(
-        camera,
-        ResolutionPreset.medium,
-        enableAudio: false,
-        imageFormatGroup: kIsWeb ? ImageFormatGroup.unknown : ImageFormatGroup.jpeg,
+      // But for mobile web (PWA), we still want to prefer the back camera.
+      CameraDescription camera = _cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => _cameras.first,
       );
 
-      await _controller!.initialize();
+      // Web browsers are extremely strict about formats and resolutions.
+      // If we request ImageFormatGroup.jpeg or a strict ResolutionPreset,
+      // it throws a CameraException(cameraNotReadable) hardware error.
+      // We start with max and fallback to handle Chrome's rigidity.
+      try {
+        _controller = CameraController(
+          camera,
+          ResolutionPreset.max,
+          enableAudio: false,
+          imageFormatGroup: kIsWeb ? ImageFormatGroup.unknown : ImageFormatGroup.jpeg,
+        );
+        await _controller!.initialize();
+      } catch (e) {
+        debugPrint('CameraService: Falling back to lower preset due to: $e');
+        _controller = CameraController(
+          camera,
+          ResolutionPreset.low,
+          enableAudio: false,
+          imageFormatGroup: kIsWeb ? ImageFormatGroup.unknown : ImageFormatGroup.jpeg,
+        );
+        await _controller!.initialize();
+      }
+
       _initFailed = false;
       notifyListeners();
       debugPrint('CameraService: Initialized with ${camera.name}');
     } catch (e) {
-      debugPrint('CameraService: Initialization failed: $e');
+      debugPrint('CameraService: Initialization failed completely: $e');
       _initFailed = true;
       _controller = null;
       notifyListeners();
@@ -82,18 +98,33 @@ class CameraService extends ChangeNotifier {
     if (!isInitialized || _isStreaming) return;
 
     _isStreaming = true;
+    _startMotionTracker();
     notifyListeners();
 
-    final interval = Duration(milliseconds: (1000 / _fps).round());
-    _frameTimer = Timer.periodic(interval, (_) => _captureFrame());
+    _scheduleNextFrame();
 
-    debugPrint('CameraService: Streaming at $_fps FPS');
+    debugPrint('CameraService: Streaming starting');
+  }
+
+  void _scheduleNextFrame() {
+    if (!_isStreaming) return;
+    
+    // Check battery saver state: 0.2 FPS (every 5 seconds) if resting, otherwise 1 FPS
+    final targetFps = _isBatterySaverActive ? 0.2 : _fps;
+    final interval = Duration(milliseconds: (1000 / targetFps).round());
+    
+    _frameTimer?.cancel();
+    _frameTimer = Timer(interval, () async {
+      await _captureFrame();
+      _scheduleNextFrame();
+    });
   }
 
   /// Stop continuous frame streaming.
   void stopStreaming() {
     _frameTimer?.cancel();
     _frameTimer = null;
+    _accelSub?.cancel();
     _isStreaming = false;
     notifyListeners();
     debugPrint('CameraService: Streaming stopped');
@@ -135,9 +166,41 @@ class CameraService extends ChangeNotifier {
   void setFps(double fps) {
     _fps = fps;
     if (_isStreaming) {
-      stopStreaming();
-      startStreaming();
+      _scheduleNextFrame();
     }
+  }
+
+  // --- Sensary Integrations for Master Polish ---
+
+  void _startMotionTracker() {
+    if (kIsWeb) return; // Sensors unsupported on web usually
+    
+    _accelSub?.cancel();
+    _accelSub = accelerometerEventStream().listen((event) {
+      // Calculate magnitude of acceleration vector
+      final magnitude = sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
+      
+      // Calculate delta from exactly 1g (9.8 m/s^2)
+      final delta = (magnitude - 9.8).abs();
+      
+      // If there is significant motion (jitter / walking)
+      if (delta > 0.5) {
+        _lastMotionTime = DateTime.now();
+        if (_isBatterySaverActive) {
+          _isBatterySaverActive = false;
+          _scheduleNextFrame(); // Instantly ramp back up to 1 FPS
+          debugPrint('CameraService: Motion detected -> 1 FPS');
+        }
+      } else {
+        // If still for more than 5 seconds, engage battery saver
+        if (!_isBatterySaverActive && DateTime.now().difference(_lastMotionTime).inSeconds >= 5) {
+          _isBatterySaverActive = true;
+          debugPrint('CameraService: Resting -> 0.2 FPS (Battery Saver On)');
+        }
+      }
+      
+      _lastAccelMagnitude = magnitude;
+    });
   }
 
   /// Switch between front and rear cameras.
@@ -163,6 +226,17 @@ class CameraService extends ChangeNotifier {
     notifyListeners();
 
     if (wasStreaming) startStreaming();
+  }
+
+  /// Toggle the camera LED flashlight on or off.
+  Future<void> toggleFlashlight(bool on) async {
+    if (!isInitialized || kIsWeb) return;
+    try {
+      await _controller!.setFlashMode(on ? FlashMode.torch : FlashMode.off);
+      debugPrint('CameraService: Flashlight toggled ${on ? 'ON' : 'OFF'}');
+    } catch (e) {
+      debugPrint('CameraService: Flashlight toggle failed: $e');
+    }
   }
 
   @override

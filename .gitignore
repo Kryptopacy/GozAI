@@ -30,7 +30,7 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/*
+/build/
 !/build/web/
 /coverage/
 
@@ -64,3 +64,17 @@ chrome/
 
 # Windows build output (not needed in repo)
 windows/
+
+# Demo & presentation docs (local team use only)
+docs/demo_script.md
+docs/pitch_notes.md
+
+# Local analysis/scratch files
+*.txt
+build_*.txt
+analyze_output.txt
+skills-lock.json
+
+# Hackathon draft articles
+hackathon_article.md
+.vercel

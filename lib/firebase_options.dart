@@ -1,7 +1,7 @@
-// File generated manually based on Firebase MCP configuration
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
 class DefaultFirebaseOptions {
@@ -23,29 +23,29 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBAR7kjLghzoU-hERmbtuXhuHfunFSOJdw',
-    appId: '1:46162926481:web:4b67b999d3191caf269830',
-    messagingSenderId: '46162926481',
-    projectId: 'gozai-app',
-    authDomain: 'gozai-app.firebaseapp.com',
-    storageBucket: 'gozai-app.firebasestorage.app',
-  );
+  static FirebaseOptions get web => FirebaseOptions(
+        apiKey: dotenv.env['FIREBASE_WEB_API_KEY'] ?? '',
+        appId: '1:46162926481:web:4b67b999d3191caf269830',
+        messagingSenderId: '46162926481',
+        projectId: 'gozai-app',
+        authDomain: 'gozai-app.firebaseapp.com',
+        storageBucket: 'gozai-app.firebasestorage.app',
+      );
 
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCJ0GOYn0O1v759yv9k61hKGamA-S65uvs',
-    appId: '1:46162926481:android:e01f0128fa4f0388269830',
-    messagingSenderId: '46162926481',
-    projectId: 'gozai-app',
-    storageBucket: 'gozai-app.firebasestorage.app',
-  );
+  static FirebaseOptions get android => FirebaseOptions(
+        apiKey: dotenv.env['FIREBASE_ANDROID_API_KEY'] ?? '',
+        appId: '1:46162926481:android:e01f0128fa4f0388269830',
+        messagingSenderId: '46162926481',
+        projectId: 'gozai-app',
+        storageBucket: 'gozai-app.firebasestorage.app',
+      );
 
-  static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBOcoHymgIvoBkDs6CHMYYNktGwdOkw5dM',
-    appId: '1:46162926481:ios:5842a62c143be9df269830',
-    messagingSenderId: '46162926481',
-    projectId: 'gozai-app',
-    storageBucket: 'gozai-app.firebasestorage.app',
-    iosBundleId: 'com.gozai.gozai',
-  );
+  static FirebaseOptions get ios => FirebaseOptions(
+        apiKey: dotenv.env['FIREBASE_IOS_API_KEY'] ?? '',
+        appId: '1:46162926481:ios:5842a62c143be9df269830',
+        messagingSenderId: '46162926481',
+        projectId: 'gozai-app',
+        storageBucket: 'gozai-app.firebasestorage.app',
+        iosBundleId: 'com.gozai.gozai',
+      );
 }
