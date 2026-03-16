@@ -76,7 +76,7 @@ class WebAudioBridge {
       _sourceNode = _audioContext!
           .createMediaStreamSource(_mediaStream as web.MediaStream);
       _workletNode =
-          _createAudioWorkletNode(_audioContext!, 'pcm-capture-processor');
+          _createAudioWorkletNode(_audioContext!, 'pcm-processor');
 
       // 5. Set onmessage callback on the worklet port — receives PCM16 ArrayBuffers
       _workletNode!.port.onmessage = _onWorkletMessage.toJS;

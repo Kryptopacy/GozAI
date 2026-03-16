@@ -25,13 +25,13 @@ import 'screens/doctor_dashboard.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Load environment configuration FIRST before Firebase
+  await dotenv.load(fileName: '.env');
+
   // Initialize Firebase using the generated options
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
-  // Load environment configuration
-  await dotenv.load(fileName: '.env');
 
   // Validate configuration
   if (!AppConfig.isConfigured) {

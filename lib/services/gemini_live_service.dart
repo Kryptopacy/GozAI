@@ -468,9 +468,21 @@ class GeminiLiveService extends ChangeNotifier {
         return;
       }
       
-      final data = jsonDecode(messageStr) as Map<String, dynamic>;
+      final dynamic data;
+      try {
+        data = jsonDecode(messageStr);
+      } catch (e) {
+        final snippet = messageStr.length > 200 
+            ? messageStr.substring(0, 200) 
+            : messageStr;
+        debugPrint('GeminiLiveService: JSON Parse Error: $e');
+        debugPrint('Payload (first 200 chars): $snippet');
+        return;
+      }
+      
+      final Map<String, dynamic> dataMap = data as Map<String, dynamic>;
       // Handle setup complete
-      if (data.containsKey('setupComplete')) {
+      if (dataMap.containsKey('setupComplete')) {
         debugPrint('GeminiLive setup complete');
         _setStatus('Ready');
         
@@ -485,8 +497,8 @@ class GeminiLiveService extends ChangeNotifier {
       }
 
       // Handle server content (audio response, text, etc.)
-      if (data.containsKey('serverContent')) {
-        final serverContent = data['serverContent'] as Map<String, dynamic>;
+      if (dataMap.containsKey('serverContent')) {
+        final serverContent = dataMap['serverContent'] as Map<String, dynamic>;
 
         // Check if model turn is complete
         if (serverContent['turnComplete'] == true) {

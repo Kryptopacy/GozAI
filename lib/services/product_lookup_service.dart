@@ -93,7 +93,18 @@ class ProductLookupService {
 
       if (response.statusCode != 200) return null;
 
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final dynamic data;
+      try {
+        data = jsonDecode(response.body);
+      } catch (e) {
+        final snippet = response.body.length > 200 
+            ? response.body.substring(0, 200) 
+            : response.body;
+        debugPrint('ProductLookupService: FDA JSON Parse Error: $e');
+        debugPrint('Response Body (first 200 chars): $snippet');
+        return null;
+      }
+      final Map<String, dynamic> json = data as Map<String, dynamic>;
       final results = json['results'] as List<dynamic>?;
       if (results == null || results.isEmpty) return null;
 
@@ -154,7 +165,18 @@ class ProductLookupService {
 
       if (response.statusCode != 200) return null;
 
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final dynamic data;
+      try {
+        data = jsonDecode(response.body);
+      } catch (e) {
+        final snippet = response.body.length > 200 
+            ? response.body.substring(0, 200) 
+            : response.body;
+        debugPrint('ProductLookupService: OpenFoodFacts JSON Parse Error: $e');
+        debugPrint('Response Body (first 200 chars): $snippet');
+        return null;
+      }
+      final Map<String, dynamic> json = data as Map<String, dynamic>;
       if (json['status'] == 0) return null; // Product not found
 
       final product = json['product'] as Map<String, dynamic>?;
