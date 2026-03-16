@@ -7,7 +7,8 @@ import 'package:just_audio/just_audio.dart';
 import '../core/app_config.dart';
 
 // Web-specific imports — only used on web platform
-import 'audio_service_web.dart' if (dart.library.io) 'audio_service_stub.dart'
+import 'audio_service_stub.dart'
+    if (dart.library.js_util) 'audio_service_web.dart'
     as web_audio;
 
 /// Service for bidirectional audio: mic capture → Gemini, Gemini → speaker.

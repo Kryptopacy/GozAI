@@ -1,20 +1,47 @@
-// Web-only audio bridge using the browser's Web Audio API for PCM extraction.
-// Imported by audio_service.dart on web via conditional import.
+// Web-only audio bridge using the browser's Web Audio API + AudioWorklet for PCM extraction.
+// Replaces the deprecated ScriptProcessorNode which was removed in modern Chrome.
 // ignore_for_file: avoid_web_libraries_in_flutter
 
-import 'dart:async';
 import 'dart:js_interop';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart'; // For debugPrint
+import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
 
-/// Bridges the browser Web Audio API to Dart audio chunk streams
+// ---------------------------------------------------------------------------
+// Minimal JS interop extensions needed for AudioWorkletNode + MessagePort
+// ---------------------------------------------------------------------------
+
+/// JS interop for the AudioWorklet addModule method.
+extension AudioWorkletExt on web.AudioWorklet {
+  external JSPromise<JSAny?> addModule(String moduleUrl);
+}
+
+/// JS interop for AudioWorkletNode constructor (not yet in package:web).
+@JS('AudioWorkletNode')
+external web.AudioWorkletNode _createAudioWorkletNode(
+    web.AudioContext context, String name);
+
+/// JS interop for MessagePort.onmessage setter.
+extension MessagePortExt on web.MessagePort {
+  external set onmessage(JSFunction? handler);
+}
+
+/// Extension type to safely access the worklet message payload {pcm16: ArrayBuffer}.
+extension type _WorkletMessage._(JSObject _) implements JSObject {
+  external JSArrayBuffer? get pcm16;
+}
+
+// ---------------------------------------------------------------------------
+// Main Bridge class
+// ---------------------------------------------------------------------------
+
+/// Bridges the browser Web Audio API (via AudioWorklet) to Dart audio chunk streams,
 /// explicitly converting the microphone stream to PCM 16-bit 16kHz.
 class WebAudioBridge {
   static web.AudioContext? _audioContext;
   static web.MediaStreamAudioSourceNode? _sourceNode;
-  static web.ScriptProcessorNode? _processorNode;
+  static web.AudioWorkletNode? _workletNode;
   static web.MediaStream? _mediaStream;
   static void Function(Uint8List)? _onChunk;
 
@@ -25,37 +52,40 @@ class WebAudioBridge {
     try {
       _onChunk = onChunk;
 
-        // 1. Get raw MediaStream from the browser with echo cancellation
+      // 1. Get raw MediaStream from the browser with echo cancellation
       _mediaStream = await web.window.navigator.mediaDevices
           .getUserMedia(web.MediaStreamConstraints(
             audio: {
               'echoCancellation': true,
               'noiseSuppression': true,
               'autoGainControl': true,
-            }.jsify() as JSAny, // cast explicitly to JSAny
+            }.jsify() as JSAny,
           ))
           .toDart;
 
-      // 2. Setup an AudioContext specifically targeting 16000 Hz if possible
+      // 2. Setup an AudioContext targeting 16000 Hz
       final contextOptions = web.AudioContextOptions(sampleRate: 16000);
       _audioContext = web.AudioContext(contextOptions);
 
-      // 3. Create a Source Node from the mic stream
-      _sourceNode = _audioContext!.createMediaStreamSource(_mediaStream as web.MediaStream);
+      // 3. Load the AudioWorklet processor module
+      await AudioWorkletExt(_audioContext!.audioWorklet)
+          .addModule('./audio_processor.js')
+          .toDart;
 
-      // 4. Create a ScriptProcessor to intercept raw PCM float data
-      _processorNode = _audioContext!.createScriptProcessor(4096, 1, 1);
+      // 4. Create Source Node and Worklet Node
+      _sourceNode = _audioContext!
+          .createMediaStreamSource(_mediaStream as web.MediaStream);
+      _workletNode =
+          _createAudioWorkletNode(_audioContext!, 'pcm-capture-processor');
 
-      // 5. Setup the audio processing callback
-      _processorNode!.addEventListener('audioprocess', _handleAudioProcess.toJS);
+      // 5. Set onmessage callback on the worklet port — receives PCM16 ArrayBuffers
+      _workletNode!.port.onmessage = _onWorkletMessage.toJS;
 
-      // 6. Connect Mic -> Processor. Do NOT connect processor to destination to avoid feedback loops!
-      _sourceNode!.connect(_processorNode!);
-      // Note: Modern browsers don't strict-require destination connection for audioprocess to fire.
-      // If needed in the future, we can connect it but zero-out the outputBuffer.
-      // _processorNode!.connect(_audioContext!.destination); 
+      // 6. Connect Mic -> Worklet (do NOT connect to destination — no audio feedback)
+      _sourceNode!.connect(_workletNode!);
 
-      debugPrint('WebAudioBridge: PCM16 Recording started at ${_audioContext!.sampleRate} Hz');
+      debugPrint(
+          'WebAudioBridge: AudioWorklet PCM16 recording started at ${_audioContext!.sampleRate} Hz');
       return true;
     } catch (e) {
       debugPrint('WebAudioBridge permission or setup error: $e');
@@ -63,32 +93,25 @@ class WebAudioBridge {
     }
   }
 
-  // Intercepts the Float32 audio buffers from the browser, converts to 16-bit PCM.
-  static void _handleAudioProcess(web.Event event) {
+  /// Receives PCM16 ArrayBuffer messages from the AudioWorklet processor.
+  static void _onWorkletMessage(web.MessageEvent event) {
     if (_onChunk == null) return;
-
-    final audioEvent = event as web.AudioProcessingEvent;
-    final inputBuffer = audioEvent.inputBuffer;
-    
-    // Get the first channel (mono) Float32Array bounds [-1.0 to 1.0]
-    final float32JsArray = inputBuffer.getChannelData(0);
-    
-    // Safely cast JSFloat32Array to Dart's Float32List
-    final float32Data = float32JsArray.toDart;
-    
-    // Convert Float32 to Int16 (PCM 16-bit)
-    final pcm16Data = Int16List(float32Data.length);
-    for (int i = 0; i < float32Data.length; i++) {
-        double sample = float32Data[i];
-        if (sample > 1.0) sample = 1.0;
-        if (sample < -1.0) sample = -1.0;
-        pcm16Data[i] = (sample * 32767.0).toInt();
+    try {
+      // The worklet posts { pcm16: ArrayBuffer }.
+      // Cast via the typed extension type to access .pcm16 safely.
+      final msg = event.data as _WorkletMessage;
+      final pcm16Buffer = msg.pcm16;
+      if (pcm16Buffer == null) return;
+      final bytes = Uint8List.view(pcm16Buffer.toDart);
+      _onChunk!(bytes);
+    } catch (e) {
+      debugPrint('WebAudioBridge: Error parsing worklet message: $e');
     }
-
-    // Convert Int16List into Uint8List (bytes) to send over WebSocket
-    final byteData = Uint8List.sublistView(pcm16Data);
-    _onChunk!(byteData);
   }
+
+  // ---------------------------------------------------------------------------
+  // Playback
+  // ---------------------------------------------------------------------------
 
   /// Gapless Web Audio API Playback for PCM16 chunks (e.g. at 24000 Hz)
   static double _nextPlayTime = 0.0;
@@ -96,7 +119,8 @@ class WebAudioBridge {
 
   static void playAudioChunk(Uint8List pcmData, int sampleRate) {
     if (_playbackContext == null) {
-      _playbackContext = web.AudioContext(web.AudioContextOptions(sampleRate: sampleRate));
+      _playbackContext =
+          web.AudioContext(web.AudioContextOptions(sampleRate: sampleRate));
       _nextPlayTime = _playbackContext!.currentTime;
     }
 
@@ -106,10 +130,8 @@ class WebAudioBridge {
       float32List[i] = int16List[i] / 32768.0;
     }
 
-    final audioBuffer = _playbackContext!.createBuffer(1, float32List.length, sampleRate);
-    
-    // In strict Dart-web JSInterop, JSFloat32Array cannot be iteratively written 
-    // to using the []= operator. We must bulk copy the dart list to the channel.
+    final audioBuffer =
+        _playbackContext!.createBuffer(1, float32List.length, sampleRate);
     audioBuffer.copyToChannel(float32List.toJS, 0);
 
     final source = _playbackContext!.createBufferSource();
@@ -117,40 +139,46 @@ class WebAudioBridge {
     source.connect(_playbackContext!.destination);
 
     if (_nextPlayTime < _playbackContext!.currentTime) {
-      // If we fell behind, catch up to current time (plus a tiny safety buffer)
       _nextPlayTime = _playbackContext!.currentTime + 0.05;
     }
 
     source.start(_nextPlayTime);
     _nextPlayTime += audioBuffer.duration;
   }
-  
+
   static void stopPlayback() {
     _nextPlayTime = 0.0;
     _playbackContext?.close();
     _playbackContext = null;
   }
 
+  // ---------------------------------------------------------------------------
+  // Cleanup
+  // ---------------------------------------------------------------------------
+
   /// Stop capturing audio and clean up the audio graph.
   static void stopRecording() {
-    _processorNode?.disconnect();
+    // Remove the message listener
+    _workletNode?.port.onmessage = null;
+
+    _workletNode?.disconnect();
     _sourceNode?.disconnect();
-    
+
     if (_mediaStream != null) {
       final tracks = _mediaStream!.getTracks().toDart;
       for (final track in tracks.whereType<web.MediaStreamTrack>()) {
         track.stop();
       }
     }
-    
+
     _audioContext?.close();
 
-    _processorNode = null;
+    _workletNode = null;
     _sourceNode = null;
     _audioContext = null;
     _mediaStream = null;
     _onChunk = null;
-    
+
     debugPrint('WebAudioBridge: Recording stopped and graph dismantled.');
   }
 }

@@ -14,4 +14,12 @@ class WebAudioBridge {
   static void stopRecording() {
     // Not used on native
   }
+
+  static void playAudioChunk(Uint8List pcmData, int sampleRate) {
+    // Not used on native
+  }
+
+  static void stopPlayback() {
+    // Not used on native
+  }
 }
