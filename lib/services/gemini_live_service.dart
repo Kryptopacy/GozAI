@@ -64,11 +64,13 @@ class GeminiLiveService extends ChangeNotifier {
   void Function(bool on)? onToggleFlashlight;
   void Function(String context)? onSpatialUpdate; // Callback for spatial memory
   void Function()? onInterrupted; // Callback for True Interruption (Barge-in)
-  void Function(String hardwareType)? onRequestHardwareAccess;
+  void Function(String hardwareType, String action)? onRequestHardwareAccess;
   void Function(double x, double y)? onClickUiElement; // AI-synthesized UI taps
   void Function(String message, String severity, String target)? onSendSosAlert; // Caregiver/Doctor SOS
   void Function(String category, String fact)? onRememberFact; // Companion memory
   void Function(bool visible)? onToggleDebugCamera; // Voice-activated video feed
+  void Function()? onOpenTranscripts; // Voice-activated transcripts
+  void Function()? onAnalyzeDocument; // High-res OCR request for micro text
 
 
   // Public getters
@@ -274,7 +276,7 @@ class GeminiLiveService extends ChangeNotifier {
               },
               {
                 'name': 'requestHardwareAccess',
-                'description': 'Requests the app to re-initialize or ask for hardware permissions (camera or mic). Call this if the system context says a sensor is OFF, the user asks you to perform a task requiring that sensor, and you have explained to them that you need to turn it on.',
+                'description': 'Requests the app to re-initialize and turn ON hardware, OR explicitly turn OFF hardware (camera or mic). Call this if the user asks you to turn a sensor ON or OFF. If the user asks you to turn a sensor OFF for privacy/security reasons, you MUST also send a mild SOS alert to their caregiver so they are aware the patient has intentionally gone dark.',
                 'parameters': {
                   'type': 'OBJECT',
                   'properties': {
@@ -282,9 +284,14 @@ class GeminiLiveService extends ChangeNotifier {
                       'type': 'STRING',
                       'description': 'The hardware to request: "camera" or "mic".',
                       'enum': ['camera', 'mic'],
+                    },
+                    'action': {
+                      'type': 'STRING',
+                      'description': 'Whether to turn the hardware "on" or "off".',
+                      'enum': ['on', 'off'],
                     }
                   },
-                  'required': ['hardwareType'],
+                  'required': ['hardwareType', 'action'],
                 }
               },
               {
@@ -399,6 +406,14 @@ class GeminiLiveService extends ChangeNotifier {
                   },
                   'required': ['visible'],
                 }
+              },
+               {
+                'name': 'openTranscripts',
+                'description': 'Opens the hidden live transcript viewer on the screen. Call this ONLY when the user explicitly asks to read, see, or open the conversation transcripts or history.',
+              },
+              {
+                'name': 'analyzeDocument',
+                'description': 'Triggers the native device to take a high-resolution, auto-focused still image and extract dense text using ML Kit OCR. Use this instead of relying on the low-res video stream when the user asks you to read specific, tiny, or dense text like a pill bottle, a prescription label, mail, or a screen. The native app will capture the frame, parse the text, and inject it securely back into your context.',
               }
             ]
           }
@@ -580,7 +595,7 @@ class GeminiLiveService extends ChangeNotifier {
               if (partMap.containsKey('text')) {
                 final text = partMap['text'] as String;
                 debugPrint('GeminiLive [text]: $text');
-                // Intentionally NOT pushed to _transcriptController
+                _transcriptController.add(text);
               }
 
               // Audio response (inline data)
@@ -681,7 +696,8 @@ class GeminiLiveService extends ChangeNotifier {
             break;
           case 'requestHardwareAccess':
             final hardwareType = args['hardwareType'] as String? ?? 'camera';
-            onRequestHardwareAccess?.call(hardwareType);
+            final action = args['action'] as String? ?? 'on';
+            onRequestHardwareAccess?.call(hardwareType, action);
             break;
           case 'rememberFact':
             final category = args['category'] as String? ?? 'general';
@@ -694,6 +710,12 @@ class GeminiLiveService extends ChangeNotifier {
           case 'toggleDebugCamera':
             final visible = args['visible'] as bool? ?? false;
             onToggleDebugCamera?.call(visible);
+            break;
+          case 'openTranscripts':
+            onOpenTranscripts?.call();
+            break;
+          case 'analyzeDocument':
+            onAnalyzeDocument?.call();
             break;
             
           // ADK Backend Delegated Tools

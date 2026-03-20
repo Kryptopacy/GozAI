@@ -55,11 +55,11 @@ Existing assistive tech (VoiceOver, TalkBack) handles labeled UI elements but fa
 | **Synthetic UI Taps** | GozAI calculates coordinates and injects synthetic taps for the user. | ✅ Live |
 | **Caregiver SOS System** | Autonomously detects distress and triggers urgent Firestore alerts. | ✅ Live |
 | **Universal Product Scanner** | Native barcode scanning + OpenFDA/OpenFoodFacts data grounding. | ✅ Live |
+| **Dual-Mode Vision Pipeline** | Macro video for obstacles; High-Res Micro OCR (`analyzeDocument` tool) for pill bottles/dense text. | ✅ Live |
+| **Proactive Hardware Synergy** | Background `LightMeter` detects <10 lux and proactively prompts Gemini to use the device flashlight. | ✅ Live |
+| **Voice-Activated Privacy** | Instantly disable camera/mic via voice, triggering a secure SOS alert to caregivers. | ✅ Live |
+| **Session Transcripts** | Ephemeral, local-only conversation logs accessible via voice for HIPAA-compliant review. | ✅ Live |
 | **Companion Memory** | Remembers user facts (medications, names, preferences) across sessions natively via Firestore. | ✅ Live |
-| **Hardware Re-activation** | Proactively identifies disabled cameras/mics and offers to re-initialize them autonomously. | ✅ Live |
-| **Auto Language Detection** | Mirrors the user's spoken language instantly; fully voice-controlled. | ✅ Live |
-| **Edge Case Resilience** | Detects offline states and critically low battery, warning the user proactively. | ✅ Live |
-| **Semantic Vibro-Acoustics** | Uses synchronized haptics for navigation / hazard warnings to reduce cognitive load. | ✅ Live |
 
 ---
 
@@ -82,8 +82,12 @@ GozAI is built strictly around the five core Activities of Daily Living (ADLs) t
 * **How it works:** Goz runs continuously in your pocket or on your lanyard, capturing frames at battery-optimized 1FPS. It prioritizes *immediate physical hazards* above everything else. Instead of shouting descriptions at you, it uses specific haptic pulses to warn of drop-offs or vehicles, keeping your audio space clear.
 
 ### 4. The Challenge: "I can't read this restaurant menu or medicine bottle."
-**The GozAI Solution:** Offline & Cloud Reading Modes.
-* **How it works:** Point your phone and ask Goz to read. For sensitive medical data or when you have no cell service, Goz falls back to on-device Google ML Kit OCR. For complex layouts like a busy restaurant menu, Gemini parses the entire visual hierarchy and reads it to you at a natural pace.
+**The GozAI Solution:** Dual-Mode Vision Pipeline.
+* **How it works:** Live video streams fail at reading tiny text on curved pill bottles due to motion blur. GozAI intelligently swaps to "Micro Mode" when you say *"Read this bottle"*. It pauses the video, captures a highly-focused 4K still image, runs it through Google ML Kit OCR natively, and feeds the 100% accurate text payload back to Gemini's context window.
+
+### 5. The Challenge: "I walked into a dark room and the AI went blind."
+**The GozAI Solution:** Proactive Hardware Synergy.
+* **How it works:** A background LightMeter continuously parses your ambient luminance. If the light drops below 10 lux, the app injects a hidden system prompt to Gemini. GozAI then proactively speaks up: *"It looks pretty dark in here. Would you like me to turn on the flashlight so I can see better?"*
 
 ---
 

@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:image/image.dart' as img;
 
 /// Offline light meter and orientation aid.
 ///
@@ -20,9 +21,12 @@ class LightMeterService extends ChangeNotifier {
   double _currentTilt = 0; // Cached tilt for combined feedback
   LightLevel _lightLevel = LightLevel.unknown;
   Timer? _toneTimer;
+  bool _isProcessingFrame = false;
+  bool _hasPromptedLowLight = false;
 
-  // Callbacks for audio feedback
+  // Callbacks for audio feedback & proactive AI warnings
   Function(double frequency)? onToneUpdate;
+  Function()? onProactiveDarknessWarning;
 
   bool get isActive => _isActive;
   double get currentLux => _currentLux;
@@ -94,6 +98,54 @@ class LightMeterService extends ChangeNotifier {
     // Map 0-255 brightness to approximate lux range (0-10,000)
     final estimatedLux = (averageBrightness / 255.0) * 10000;
     updateLux(estimatedLux);
+  }
+
+  /// Process raw JPEG bytes to calculate luminance on a background thread.
+  void processFrameBrightness(Uint8List jpegBytes) async {
+    // Throttle: process one frame every 5 seconds
+    if (_isProcessingFrame || !_isActive) return;
+    _isProcessingFrame = true;
+
+    try {
+      // Decode image in a background isolate
+      final image = await compute(img.decodeJpg, jpegBytes);
+      if (image == null) return;
+
+      double totalLuminance = 0;
+      int count = 0;
+
+      // Sample every 10th pixel to be blazing fast
+      for (int y = 0; y < image.height; y += 10) {
+        for (int x = 0; x < image.width; x += 10) {
+          final pixel = image.getPixel(x, y);
+          final num r = pixel.r;
+          final num g = pixel.g;
+          final num b = pixel.b;
+          final lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          totalLuminance += lum;
+          count++;
+        }
+      }
+
+      final avgLum = count > 0 ? (totalLuminance / count) : 0.0;
+      estimateFromFrameBrightness(avgLum);
+
+      // Trigger proactive warning if it's incredibly dark and we haven't warned recently
+      if (_lightLevel == LightLevel.dark && !_hasPromptedLowLight) {
+        _hasPromptedLowLight = true;
+        onProactiveDarknessWarning?.call();
+        // Reset warning state after 2 minutes
+        Future.delayed(const Duration(minutes: 2), () {
+          _hasPromptedLowLight = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('LightMeter frame processing failed: $e');
+    } finally {
+      Future.delayed(const Duration(seconds: 5), () {
+        _isProcessingFrame = false;
+      });
+    }
   }
 
   /// Classify the light level from a lux reading.

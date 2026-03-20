@@ -4,9 +4,14 @@ class PcmProcessor extends AudioWorkletProcessor {
     if (input && input.length > 0) {
       const channelData = input[0]; // Float32Array
       if (channelData && channelData.length > 0) {
-        // We must slice() the buffer because the browser reuses the underlying memory array
-        // across process() calls, which would mutate data before the main thread reads it.
-        this.port.postMessage(channelData.slice());
+        // Convert Float32 to Int16
+        const pcm16 = new Int16Array(channelData.length);
+        for (let i = 0; i < channelData.length; i++) {
+          let s = Math.max(-1, Math.min(1, channelData[i]));
+          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        // Send the bare ArrayBuffer to prevent Dart dart2js property mangling
+        this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
       }
     }
     // Return true to keep the processor alive indefinitely

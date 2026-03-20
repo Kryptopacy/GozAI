@@ -1,14 +1,14 @@
 {
-  "java.jdt.ls.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
+  "java.jdt.ls.java.home": "D:\\jdk\\jdk-17",
   "java.configuration.runtimes": [
     {
-      "name": "JavaSE-21",
-      "path": "C:\\Program Files\\Android\\Android Studio\\jbr",
+      "name": "JavaSE-17",
+      "path": "D:\\jdk\\jdk-17",
       "default": true
     }
   ],
-  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+  "python.defaultInterpreterPath": "d:\\backups to free space\\GozAI\\backend\\.venv\\Scripts\\python.exe",
   "python.analysis.extraPaths": [
-    "${workspaceFolder}/backend"
+    "d:/backups to free space/GozAI/backend"
   ]
 }

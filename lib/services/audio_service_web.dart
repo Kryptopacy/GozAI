@@ -28,10 +28,7 @@ extension MessagePortExt on web.MessagePort {
   external set onmessage(JSFunction? handler);
 }
 
-/// Extension type to safely access the worklet message payload {pcm16: ArrayBuffer}.
-extension type _WorkletMessage._(JSObject _) implements JSObject {
-  external JSArrayBuffer? get pcm16;
-}
+// Removed _WorkletMessage to avoid dart2js mangling
 
 // ---------------------------------------------------------------------------
 // Main Bridge class
@@ -67,10 +64,13 @@ class WebAudioBridge {
       // 2. Setup an AudioContext targeting 16000 Hz
       final contextOptions = web.AudioContextOptions(sampleRate: 16000);
       _audioContext = web.AudioContext(contextOptions);
+      if (_audioContext!.state == 'suspended') {
+        _audioContext!.resume();
+      }
 
       // 3. Load the AudioWorklet processor module
       await AudioWorkletExt(_audioContext!.audioWorklet)
-          .addModule('/audio_processor.js')
+          .addModule('audio_processor.js')
           .toDart;
 
       // 4. Create Source Node and Worklet Node
@@ -98,11 +98,10 @@ class WebAudioBridge {
   static void _onWorkletMessage(web.MessageEvent event) {
     if (_onChunk == null) return;
     try {
-      // The worklet posts { pcm16: ArrayBuffer }.
-      // Cast via the typed extension type to access .pcm16 safely.
-      final msg = event.data as _WorkletMessage;
-      final pcm16Buffer = msg.pcm16;
+      // The worklet now directly posts the ArrayBuffer to avoid dart2js mangling.
+      final pcm16Buffer = event.data as JSArrayBuffer?;
       if (pcm16Buffer == null) return;
+      
       final bytes = Uint8List.view(pcm16Buffer.toDart);
       _onChunk!(bytes);
     } catch (e) {

@@ -123,6 +123,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _playLightMeterTone(frequency);
     };
 
+    lightMeter.onProactiveDarknessWarning = () {
+      debugPrint('GozAI: Proactive darkness warning triggered.');
+      geminiService.sendText(
+        '[SYSTEM - LOW LIGHT DETECTED] The ambient light level is near zero. The camera feed is likely too dark to see obstacles clearly. Proactively notify the user and ask if they would like you to turn on the flashlight.'
+      );
+    };
+
+    // Feed camera frames to the light meter for offline luminance analysis
+    cameraService.frameStream.listen((frameBytes) {
+      if (lightMeter.isActive) {
+        lightMeter.processFrameBrightness(frameBytes);
+      }
+    });
+
     // Bind Voice Command (Gemini Function Calling) intents
     geminiService.onSwitchCamera = () {
       cameraService.switchCamera();
@@ -245,18 +259,72 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       HapticService.alert();
     };
 
+    // Voice-activated hidden transcripts
+    geminiService.onOpenTranscripts = () {
+      debugPrint('GozAI: AI requested to open transcripts.');
+      HapticService.tap();
+      if (mounted) context.push('/transcripts');
+    };
+
+    // Voice-activated High-Res OCR Analysis
+    geminiService.onAnalyzeDocument = () async {
+      debugPrint('GozAI: AI requested High-Res OCR scan.');
+      HapticService.alert();
+      
+      final camera = context.read<CameraService>();
+      final ocr = context.read<OcrService>();
+      
+      geminiService.sendText('[SYSTEM - INTERNAL] Taking high-resolution snapshot for OCR... please ask the user to hold the document steady for a moment.');
+      
+      final snapshotData = await camera.captureSnapshot();
+      if (snapshotData == null) {
+        geminiService.sendText('[SYSTEM - ERROR] Failed to capture snapshot. Inform the user.');
+        return;
+      }
+      
+      final result = await ocr.recognizeFromBytes(snapshotData);
+      
+      if (result.isEmpty) {
+        geminiService.sendText('[SYSTEM - OCR RESULT] No text detected in the frame. Ask the user to adjust the document and try again.');
+        return;
+      }
+      
+      final isMed = ocr.isMedicationLabel(result) || ocr.isPrescriptionLabel(result);
+      final isNut = ocr.isNutritionLabel(result);
+      
+      final groundingString = result.buildGroundingString(isMedication: isMed, isNutrition: isNut);
+      
+      // Inject to Gemini
+      geminiService.sendText('[SYSTEM - OCR CAPTURE SUCCESSFUL]\\n$groundingString\\nPlease read this precisely to the user based on their question.');
+      HapticService.safePathConfirm();
+    };
+
     // Wire hardware re-initialization requests
-    geminiService.onRequestHardwareAccess = (hardwareType) async {
-      debugPrint('GozAI: Model requested hardware access for: $hardwareType');
-      if (hardwareType == 'camera') {
-        final cameraService = context.read<CameraService>();
-        await cameraService.initialize();
-        if (cameraService.isInitialized && !cameraService.initFailed) {
-          cameraService.startStreaming();
+    geminiService.onRequestHardwareAccess = (hardwareType, action) async {
+      debugPrint('GozAI: Model requested hardware access for: $hardwareType action: $action');
+      if (action == 'on') {
+        if (hardwareType == 'camera') {
+          final cameraService = context.read<CameraService>();
+          await cameraService.initialize();
+          if (cameraService.isInitialized && !cameraService.initFailed) {
+            cameraService.startStreaming();
+          }
+        } else if (hardwareType == 'mic') {
+          final audioSvc = context.read<AudioService>();
+          await audioSvc.startRecording();
         }
-      } else if (hardwareType == 'mic') {
-        final audioSvc = context.read<AudioService>();
-        await audioSvc.startRecording();
+      } else if (action == 'off') {
+        if (hardwareType == 'camera') {
+          context.read<CameraService>().stopStreaming();
+        } else if (hardwareType == 'mic') {
+          context.read<AudioService>().stopRecording();
+        }
+        _sosService.sendAlert(
+          userId: 'demo_patient_001',
+          message: 'User intentionally disabled their $hardwareType feed via voice command.',
+          severity: 'info',
+          target: 'caregiver',
+        );
       }
       
       if (!mounted) return;
@@ -271,11 +339,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (context.read<AudioService>().isRecording) {
         hardwareContext += '- Microphone: ON\\n';
       } else {
-        hardwareContext += '- Microphone: OFF (Failed to start)\\n';
+        hardwareContext += '- Microphone: OFF (Disabled or failed)\\n';
       }
       
       final cam = context.read<CameraService>();
-      if (cam.isInitialized && !cam.initFailed) {
+      if (cam.isInitialized && !cam.initFailed && cam.isStreaming) {
          hardwareContext += '- Camera: ON\\n';
       } else {
          hardwareContext += '- Camera: OFF/FAILED\\n';
@@ -472,7 +540,57 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             _buildAmbientGlowBackground(),
             
             // Debug Camera Overlay (Floating Window)
-            _buildDebugCameraOverlay(),
+            if (_showDebugCamera)
+              _buildDebugCameraOverlay(context),
+            
+            // Debug Camera Toggle - Premium placement & contrast
+            Positioned(
+              top: 110,
+              right: 24,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _showDebugCamera = !_showDebugCamera;
+                  });
+                  HapticService.tap();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: GozAITheme.backgroundBlack.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: GozAITheme.accentCyan.withValues(alpha: 0.5), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: GozAITheme.accentCyan.withValues(alpha: 0.15),
+                        blurRadius: 12,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _showDebugCamera ? Icons.visibility_off : Icons.visibility,
+                        color: GozAITheme.accentCyan,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _showDebugCamera ? 'Hide Goz View' : 'Show Goz View',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
             
             // UI Layer
             SafeArea(
@@ -633,19 +751,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 isActive: isMicOn,
               ),
               const SizedBox(width: 12),
-              GestureDetector(
-                onLongPress: () {
-                  setState(() {
-                    _showDebugCamera = !_showDebugCamera;
-                  });
-                  HapticService.alert();
-                  debugPrint('Debug Camera toggled: $_showDebugCamera');
-                },
-                child: _buildStatusChip(
-                  icon: isCameraOn ? Icons.videocam : Icons.videocam_off,
-                  label: cameraText,
-                  isActive: isCameraOn,
-                ),
+              _buildStatusChip(
+                icon: isCameraOn ? Icons.videocam : Icons.videocam_off,
+                label: cameraText,
+                isActive: isCameraOn,
               ),
             ],
           ),
@@ -1125,32 +1234,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   /// Floating Debug Camera window for absolute transparency of what Goz sees.
-  /// Toggled by long-pressing the Camera status chip.
-  Widget _buildDebugCameraOverlay() {
-    return Visibility(
-      visible: _showDebugCamera,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // Responsive sizing based on screen constraints
-          final double maxWidth = constraints.maxWidth * 0.45;
-          final double maxHeight = constraints.maxHeight * 0.4;
-          final double width = maxWidth.clamp(120.0, 240.0);
-          final double expandedHeight = maxHeight.clamp(160.0, 320.0);
-          final double minimizedHeight = 40.0; // Just the header
+  Widget _buildDebugCameraOverlay(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final double maxWidth = size.width * 0.45;
+    final double maxHeight = size.height * 0.4;
+    final double width = maxWidth.clamp(120.0, 240.0);
+    final double expandedHeight = maxHeight.clamp(160.0, 320.0);
+    final double minimizedHeight = 40.0; // Just the header
 
-          // Ensure window stays within screen bounds
-          double x = _debugCameraPosition.dx.clamp(0.0, constraints.maxWidth - width);
-          double y = _debugCameraPosition.dy.clamp(0.0, constraints.maxHeight - (_debugCameraMinimized ? minimizedHeight : expandedHeight));
+    // Ensure window stays within screen bounds
+    double x = _debugCameraPosition.dx.clamp(0.0, size.width - width);
+    double y = _debugCameraPosition.dy.clamp(0.0, size.height - (_debugCameraMinimized ? minimizedHeight : expandedHeight));
 
-          return Positioned(
-            left: x,
-            top: y,
-            child: GestureDetector(
-              onPanUpdate: (details) {
-                setState(() {
-                  _debugCameraPosition += details.delta;
-                });
-              },
+    return Positioned(
+      left: x,
+      top: y,
+      child: GestureDetector(
+        onPanUpdate: (details) {
+          setState(() {
+            _debugCameraPosition += details.delta;
+          });
+        },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeInOut,
@@ -1263,10 +1367,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
               ),
             ),
-          );
-        },
-      ),
-    );
+      );
   }
 }
 

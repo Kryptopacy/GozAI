@@ -10,8 +10,8 @@ class PcmProcessor extends AudioWorkletProcessor {
           let s = Math.max(-1, Math.min(1, channelData[i]));
           pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
-        // Send as { pcm16: ArrayBuffer } to match _WorkletMessage interface in Dart
-        this.port.postMessage({ pcm16: pcm16.buffer }, [pcm16.buffer]);
+        // Send the bare ArrayBuffer to prevent Dart dart2js property mangling
+        this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
       }
     }
     // Return true to keep the processor alive indefinitely

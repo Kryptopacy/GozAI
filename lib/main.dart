@@ -21,6 +21,7 @@ import 'services/user_memory_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/caregiver_dashboard.dart';
 import 'screens/doctor_dashboard.dart';
+import 'screens/transcripts_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,6 +60,10 @@ final GoRouter _router = GoRouter(
     GoRoute(
       path: '/doctor',
       builder: (context, state) => const DoctorDashboard(),
+    ),
+    GoRoute(
+      path: '/transcripts',
+      builder: (context, state) => const TranscriptsScreen(),
     ),
   ],
 );
