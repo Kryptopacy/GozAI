@@ -97,47 +97,47 @@ class GozAITheme {
       ),
     );
 
-    // Typography: Space Grotesk for display gravitas, DM Sans for body legibility
-    final displayFont = GoogleFonts.spaceGroteskTextTheme(baseTheme.textTheme);
-    final bodyFont    = GoogleFonts.dmSansTextTheme(baseTheme.textTheme);
+    // Typography: Syncopate for display gravitas, Outfit for body legibility
+    final displayFont = GoogleFonts.syncopateTextTheme(baseTheme.textTheme);
+    final bodyFont    = GoogleFonts.outfitTextTheme(baseTheme.textTheme);
 
     final textTheme = bodyFont.copyWith(
       displayLarge: displayFont.displayLarge?.copyWith(
-        fontSize: 52,
-        fontWeight: FontWeight.w800,
+        fontSize: 48,
+        fontWeight: FontWeight.w900,
         color: textPrimary,
-        letterSpacing: -2.0,
-        height: 1.05,
+        letterSpacing: -1.5,
+        height: 1.1,
       ),
       headlineMedium: displayFont.headlineMedium?.copyWith(
-        fontSize: 32,
-        fontWeight: FontWeight.w700,
-        color: textPrimary,
-        letterSpacing: -1.0,
-      ),
-      titleLarge: displayFont.titleLarge?.copyWith(
-        fontSize: 22,
-        fontWeight: FontWeight.w600,
+        fontSize: 28,
+        fontWeight: FontWeight.w800,
         color: textPrimary,
         letterSpacing: -0.5,
       ),
+      titleLarge: displayFont.titleLarge?.copyWith(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: textPrimary,
+        letterSpacing: 1.0,
+      ),
       bodyLarge: bodyFont.bodyLarge?.copyWith(
         fontSize: 18,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w300,
         color: textPrimary,
         height: 1.6,
       ),
       bodyMedium: bodyFont.bodyMedium?.copyWith(
         fontSize: 15,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w300,
         color: textSecondary,
         height: 1.5,
       ),
       labelLarge: bodyFont.labelLarge?.copyWith(
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
+        fontSize: 14,
+        fontWeight: FontWeight.w800,
         color: textPrimary,
-        letterSpacing: 0.8,
+        letterSpacing: 2.0,
       ),
     );
 

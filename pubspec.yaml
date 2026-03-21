@@ -52,6 +52,7 @@ dependencies:
   google_fonts: ^6.2.1
   go_router: any
   image: ^4.8.0
+  flutter_animate: ^4.5.2
 
 dev_dependencies:
   flutter_test:

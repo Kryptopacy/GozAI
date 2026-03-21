@@ -22,6 +22,8 @@ import 'screens/home_screen.dart';
 import 'screens/caregiver_dashboard.dart';
 import 'screens/doctor_dashboard.dart';
 import 'screens/transcripts_screen.dart';
+import 'screens/login_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,18 +50,36 @@ void main() async {
 /// GozAI — Premium Navigation Router
 final GoRouter _router = GoRouter(
   initialLocation: '/',
+  redirect: (context, state) {
+    final user = FirebaseAuth.instance.currentUser;
+    final isGoingToProtected = state.matchedLocation == '/caregiver' || state.matchedLocation == '/doctor';
+
+    // If unauthenticated and trying to access pro dashboards, route to login wall
+    if (user == null && isGoingToProtected) {
+      return '/login';
+    }
+
+    return null; // Return null to proceed
+  },
   routes: [
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => const LoginScreen(),
+    ),
     GoRoute(
       path: '/',
       builder: (context, state) => const HomeScreen(),
     ),
     GoRoute(
       path: '/caregiver',
-      builder: (context, state) => const CaregiverDashboard(),
+      builder: (context, state) => const CaregiverDashboard(patientUid: 'demo_patient_001'),
     ),
     GoRoute(
       path: '/doctor',
-      builder: (context, state) => const DoctorDashboard(),
+      builder: (context, state) {
+        final dId = FirebaseAuth.instance.currentUser?.uid ?? 'demo_doctor_001';
+        return DoctorDashboard(doctorId: dId);
+      },
     ),
     GoRoute(
       path: '/transcripts',
